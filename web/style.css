@@ -3,12 +3,13 @@
    Look: business-newspaper styling - salmon paper, warm charcoal ink, claret accents,
    oxford-blue charts, serif headlines, square corners, black rules over section heads. */
 :root {
+  color-scheme: light;
   --paper: #fff1e5;
   --surface: #fff1e5;
   --raised: #fff8f2;
-  --ink: #33302e;
+  --ink: #0d0c0b;
   --ink-2: #66605c;
-  --ink-3: #736c67;
+  --ink-3: #66605c;
   --line: #e6d9ce;
   --line-strong: #ccc1b7;
   --accent: #990f3d;
@@ -20,25 +21,12 @@
   --nodata: #e6d9ce;
   --series-1: #0f5499;
   --series-2: #eb5e8d;
-  --ref: #33302e;
+  --ref: #0d0c0b;
   --shadow: 0 4px 18px rgba(51, 48, 46, .14);
   --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
   --font-body: "Figtree", "Helvetica Neue", Arial, sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #262a33; --surface: #262a33; --raised: #30353f; --ink: #fff1e5; --ink-2: #ccc1b7; --ink-3: #a89f97;
-    --line: #3a3f4a; --line-strong: #555b66; --accent: #f2779d; --accent-soft: #343a46; --link: #96ccff;
-    --btn: #2ea6ae; --btn-ink: #10161a; --bar: #6baef0; --nodata: #3a3f4a; --series-1: #6baef0; --series-2: #f07fa4;
-    --ref: #fff1e5; --shadow: 0 4px 18px rgba(0, 0, 0, .45); color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --paper: #262a33; --surface: #262a33; --raised: #30353f; --ink: #fff1e5; --ink-2: #ccc1b7; --ink-3: #a89f97;
-  --line: #3a3f4a; --line-strong: #555b66; --accent: #f2779d; --accent-soft: #343a46; --link: #96ccff;
-  --btn: #2ea6ae; --btn-ink: #10161a; --bar: #6baef0; --nodata: #3a3f4a; --series-1: #6baef0; --series-2: #f07fa4;
-  --ref: #fff1e5; --shadow: 0 4px 18px rgba(0, 0, 0, .45); color-scheme: dark;
-}
+/* Single deliberate look: always salmon paper, never a dark variant. */
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }

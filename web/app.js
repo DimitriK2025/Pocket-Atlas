@@ -89,7 +89,7 @@
   const CAT_DARK = ["#6baef0", "#f2779d", "#2ea6ae", "#f0b429", "#f59fbf", "#a98bd6"];
   const root = document.documentElement;
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
-  const isDark = () => root.dataset.theme === "dark" || (root.dataset.theme !== "light" && mq.matches);
+  const isDark = () => false; // the atlas always uses its light salmon look
   const pal = () => (isDark() ? { seq: SEQ_DARK, div: DIV_DARK, cat: CAT_DARK } : { seq: SEQ, div: DIV, cat: CAT });
 
   // ---------- state ----------
