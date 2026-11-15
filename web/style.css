@@ -112,6 +112,7 @@ button { font: inherit; color: inherit; }
   background: var(--raised); cursor: pointer; font-size: 17px; line-height: 1; color: var(--ink);
 }
 .zoomctl button:hover { border-color: var(--ink-2); }
+.zoomctl button.close { font-size: 22px; font-weight: 400; color: var(--ink); }
 .hint { position: absolute; left: 4px; bottom: 8px; font-size: 12px; color: var(--ink-3); pointer-events: none; }
 
 .tablebox { min-height: 360px; overflow: auto; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }

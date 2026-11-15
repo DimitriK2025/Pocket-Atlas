@@ -244,7 +244,7 @@
     syncControls();
     if (ov) { drawOverview(); return; }
     if (wasHidden && st.view === "map") layout();
-    paint(); drawSelection(); drawCrumbs(); drawPanel();
+    paint(); drawSelection(); drawCrumbs(); drawPanel(); syncResetButton();
     if (rezoom && !wasHidden) zoomToCurrent(true);
   }
   function goTopic(tid, mid, county) {
@@ -309,7 +309,15 @@
   }));
   $("#zin").addEventListener("click", () => svg.transition().duration(300).call(zoom.scaleBy, 1.6));
   $("#zout").addEventListener("click", () => svg.transition().duration(300).call(zoom.scaleBy, 1 / 1.6));
-  $("#zreset").addEventListener("click", () => zoomToCurrent(true));
+  const zreset = $("#zreset");
+  zreset.addEventListener("click", () => { if (st.focus || st.selected !== STATE_ID) goState(); else zoomToCurrent(true); });
+  function syncResetButton() {
+    const open = st.focus || st.selected !== STATE_ID;
+    zreset.textContent = open ? "\u00d7" : "\u2922";
+    zreset.setAttribute("aria-label", open ? "Close and return to " + D.name : "Reset zoom");
+    zreset.title = open ? "Close" : "Reset zoom";
+    zreset.classList.toggle("close", !!open);
+  }
 
   // ---------- table view ----------
   function drawTable() {
@@ -497,29 +505,12 @@
       return `<tr><td><button class="lnk strong" data-topic="${METRIC[id].topic}" data-m="${id}">${METRIC[id].label}</button></td>
         <td>${cty(vals[0], id)}</td><td>${cty(vals[vals.length - 1], id)}</td></tr>`;
     }).join("");
-    const cards = TOPICS.map((t) => {
-      const names = t.metrics.filter((m) => !["pop", "density"].includes(m.id)).map((m) => m.label);
-      return `<button class="tcard" data-topic="${t.id}"><b>${t.label}</b><span>${names.slice(0, 4).join(" · ")}${names.length > 4 ? " · and more" : ""}</span></button>`;
-    }).join("");
     ovEl.innerHTML = `
-      <div class="ov-lead">
-        <p class="standfirst">Who lives in ${D.name}, mapped from the whole state down to its ${fInt(tracts.length)} census tracts:
-          ${TOPICS.length} topics and ${Object.keys(METRIC).length} statistics from the U.S. Census Bureau's American Community Survey.</p>
-      </div>
       <div class="ov-grid">
         <section class="ov-sec ov-glance"><h2>${D.name} at a glance</h2><div class="kpis four">${tiles.join("")}</div></section>
         <section class="ov-sec ov-ext"><h2>Highs and lows by county</h2>
           <table class="ext"><thead><tr><th>Statistic</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>${ext}</tbody></table>
           <p class="hint2">Click a statistic to map it, or a county to open its tracts.</p></section>
-        <section class="ov-sec ov-topics"><h2>What's in the atlas</h2><div class="tcards">${cards}</div></section>
-        <section class="ov-sec ov-about"><h2>How it works</h2><ul>
-          <li><b>Pick a topic</b> above, then a statistic. Counties are colored first; click one to zoom into its census tracts, then click a tract for its full profile.</li>
-          <li><b>Census tracts</b> are small neighborhoods of roughly 1,200 to 8,000 people, drawn by the Census Bureau to stay stable over time.</li>
-          <li><b>Colors</b> split places into 7 groups with equal numbers of places in each, from white (lowest) to deep blue (highest).</li>
-          <li><b>Data</b> are American Community Survey 2019–2023 five-year estimates, the most recent release that covers every tract.
-            They are survey estimates: ± figures are 90% margins of error, and small tracts carry wide ones.</li>
-          <li><b>Left out:</b> fertility. Tract-level birth counts are too small for the survey to measure reliably.</li>
-        </ul></section>
       </div>`;
     ovEl.querySelectorAll("[data-topic]").forEach((b) => b.addEventListener("click", () => goTopic(b.dataset.topic, b.dataset.m, b.dataset.county)));
   }
