@@ -78,12 +78,15 @@
   TOPICS.forEach((t) => t.metrics.forEach((m) => (METRIC[m.id] = Object.assign(m, { topic: t.id }))));
 
   // ---------- palettes (dataviz reference palette) ----------
-  const SEQ = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"];
-  const SEQ_DARK = ["#13304f", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb"];
-  const DIV = ["#b8312f", "#e66767", "#f4b5b0", "#e9e8e4", "#9ec5f4", "#3987e5", "#184f95"];
-  const DIV_DARK = ["#f08a87", "#d14d4c", "#6e3333", "#383835", "#1c4a85", "#3987e5", "#86b6ef"];
-  const CAT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#6250d6"];
-  const CAT_DARK = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"];
+  // Sequential: near-white (lowest) -> deep claret red (highest), same in both themes.
+  const SEQ = ["#fff8f2", "#fcd9c4", "#f7ae8f", "#ee7f62", "#d9503f", "#b1252f", "#7a0a24"];
+  const SEQ_DARK = SEQ;
+  // Diverging (sex ratio): blue = more women, red = more men, neutral midpoint.
+  const DIV = ["#0f5499", "#4f88c6", "#a9c9e8", "#f2e6dc", "#f7ae8f", "#d9503f", "#7a0a24"];
+  const DIV_DARK = ["#3f7fc4", "#2d5a8c", "#24384f", "#3a3f4a", "#6b2a2e", "#c0413a", "#f08c75"];
+  // Categorical (largest group)
+  const CAT = ["#0f5499", "#990f3d", "#0d7680", "#e3a000", "#eb5e8d", "#593380"];
+  const CAT_DARK = ["#6baef0", "#f2779d", "#2ea6ae", "#f0b429", "#f59fbf", "#a98bd6"];
   const root = document.documentElement;
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
   const isDark = () => root.dataset.theme === "dark" || (root.dataset.theme !== "light" && mq.matches);
@@ -420,7 +423,7 @@
     const data = labels.map((l, i) => ({ l, v: sh[i], c: counts[i], r: ref ? ref[i] : null, i }));
     const g = sv.selectAll("g.c").data(data).join("g").attr("class", "c").attr("transform", (d) => `translate(${d.i * (bw + gap)},0)`);
     g.append("rect").attr("width", bw).attr("height", h).attr("fill", "transparent");
-    g.append("path").attr("fill", "var(--accent)").attr("d", (d) => {
+    g.append("path").attr("fill", "var(--bar)").attr("d", (d) => {
       const hh = y(d.v), y0 = h - bottom, r = Math.min(2, hh);
       return `M0,${y0}V${y0 - hh + r}Q0,${y0 - hh} ${r},${y0 - hh}H${bw - r}Q${bw},${y0 - hh} ${bw},${y0 - hh + r}V${y0}Z`;
     });
@@ -462,7 +465,7 @@
     const sec = (title, sub) => { const d = document.createElement("div"); d.className = "sec"; d.innerHTML = `<h3>${title}<small>${sub}</small></h3>`; panel.appendChild(d); return d; };
 
     const r = sec("Race & Ethnicity", refKey);
-    hbars(r, META.race, s.d.race, ref && ref.d.race, "var(--accent)");
+    hbars(r, META.race, s.d.race, ref && ref.d.race, "var(--bar)");
     r.insertAdjacentHTML("beforeend", `<div class="facts"><span>Diversity index <b>${has(s.m.diversity) ? Math.round(s.m.diversity) + "%" : "–"}</b></span></div>`);
 
     const a = sec("Age & Sex", ref ? refKey : "share of residents");
@@ -472,7 +475,7 @@
       <span>65+ <b>${has(s.m.pct_65plus) ? fPct(s.m.pct_65plus) : "–"}</b></span><span>Men per 100 women <b>${has(s.m.sex_ratio) ? s.m.sex_ratio.toFixed(1) : "–"}</b></span></div>`);
 
     const e = sec("Education", ref ? refKey : "adults 25 and older");
-    hbars(e, META.edu, s.d.edu, ref && ref.d.edu, "var(--accent)");
+    hbars(e, META.edu, s.d.edu, ref && ref.d.edu, "var(--bar)");
 
     const i = sec("Household Income", ref ? refKey : "share of households");
     columns(i, META.income_bins, s.d.income, ref && ref.d.income);
