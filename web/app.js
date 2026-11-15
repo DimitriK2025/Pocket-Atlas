@@ -72,11 +72,12 @@
   const CAT = ["#0f5499", "#990f3d", "#0d7680", "#e3a000", "#eb5e8d", "#593380"];
 
   // ---------- state ----------
-  const st = { topic: "hhincome", metric: "median_income", level: "county", focus: null, selected: STATE_ID, view: "map", sort: { key: "value", dir: -1 } };
+  const st = { topic: "overview", metric: "median_income", level: "county", focus: null, selected: STATE_ID, view: "map", sort: { key: "value", dir: -1 } };
 
   // ---------- DOM ----------
   const $ = (s) => document.querySelector(s);
   const topicsEl = $("#topics"), metricsEl = $("#metrics"), crumbsEl = $("#crumbs");
+  const mainEl = $("#main"), ovEl = $("#overview");
   const mapbox = $("#mapbox"), tablebox = $("#tablebox"), legendEl = $("#legend"), panel = $("#panel"), tip = $("#tip");
   document.title = D.name + " Atlas";
   $("#title").innerHTML = D.name + " <span>Atlas</span>";
@@ -237,11 +238,24 @@
   }
   function goState() { st.focus = null; st.selected = STATE_ID; update(true); }
   function update(rezoom) {
-    paint(); drawSelection(); drawCrumbs(); drawPanel(); syncControls();
-    if (rezoom) zoomToCurrent(true);
+    const ov = st.topic === "overview";
+    const wasHidden = mainEl.hidden;
+    mainEl.hidden = ov; ovEl.hidden = !ov; metricsEl.hidden = ov;
+    syncControls();
+    if (ov) { drawOverview(); return; }
+    if (wasHidden && st.view === "map") layout();
+    paint(); drawSelection(); drawCrumbs(); drawPanel();
+    if (rezoom && !wasHidden) zoomToCurrent(true);
+  }
+  function goTopic(tid, mid, county) {
+    const t = TOPICS.find((x) => x.id === tid);
+    st.topic = tid; st.metric = mid || t.metrics[0].id;
+    if (county) { st.level = "county"; st.focus = county; st.selected = county; }
+    drawMetrics(); update(false);
+    window.scrollTo(0, 0);
   }
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
+    if (e.key !== "Escape" || st.topic === "overview") return;
     if (st.selected.length === 11 && st.focus) select(st.focus);
     else if (st.focus || st.selected !== STATE_ID) goState();
   });
@@ -262,14 +276,16 @@
 
   // ---------- controls ----------
   function drawTopics() {
-    topicsEl.innerHTML = TOPICS.map((t) => `<button class="topic" role="tab" id="topic-${t.id}" data-t="${t.id}">${t.label}</button>`).join("");
+    topicsEl.innerHTML = [{ id: "overview", label: "Overview" }, ...TOPICS]
+      .map((t) => `<button class="topic" role="tab" id="topic-${t.id}" data-t="${t.id}">${t.label}</button>`).join("");
     topicsEl.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
-      const t = TOPICS.find((x) => x.id === b.dataset.t);
-      st.topic = t.id; st.metric = t.metrics[0].id; drawMetrics(); update(false);
+      if (b.dataset.t === "overview") { st.topic = "overview"; update(false); }
+      else goTopic(b.dataset.t);
     }));
   }
   function drawMetrics() {
     const t = TOPICS.find((x) => x.id === st.topic);
+    if (!t) { metricsEl.innerHTML = ""; return; }
     metricsEl.innerHTML = t.metrics.map((m) => `<button class="chip" id="metric-${m.id}" data-m="${m.id}">${m.label}</button>`).join("");
     metricsEl.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { st.metric = b.dataset.m; update(false); }));
   }
@@ -428,34 +444,21 @@
     }
   }
 
-  function kpi(label, id, mId) {
-    const m = METRIC[mId];
-    const isState = id === STATE_ID;
-    const sv = S0.m[mId], s = D.geo[id], v = s ? s.m[mId] : null, moe = s && s.moe ? s.moe[mId] : null;
-    const parts = [];
-    if (has(v) && m.moe && has(moe) && !isState) parts.push("±" + FMT[m.fmt].f(moe));
-    parts.push(isState ? m.unit : D.name + ": " + (has(sv) ? FMT[m.fmt].f(sv) : "–"));
-    return `<div class="kpi"><span class="k">${label}</span><span class="v">${has(v) ? FMT[m.fmt].f(v) : "No data"}</span>
-      <span class="c">${parts.join(" · ")}</span></div>`;
-  }
-
   function drawPanel() {
     const id = st.selected, f = byId.get(id), s = D.geo[id];
     const lvl = f.properties.level;
     const topic = TOPICS.find((t) => t.id === st.topic);
     const eyebrow = lvl === "state" ? "State" : lvl === "county" ? "County" : "Census tract · " + f.properties.county;
     const ref = id === STATE_ID ? null : S0;
-    let note = "";
-    if (lvl === "state") note = `${counties.length} counties · ${fInt(tracts.length)} census tracts. Click a county to see its tracts.`;
-    if (lvl === "county") note = `${tracts.filter((t) => t.properties.GEOID.startsWith(id)).length} census tracts. Click one for its profile.`;
-    if (lvl === "tract" && s && s.pop < 500) note = "Small population: estimates for this tract have wide margins of error.";
+    const popTxt = s ? `Population ${fInt(s.pop)}` : "";
+    let note = popTxt;
+    if (lvl === "state") note = `${popTxt} · ${counties.length} counties · ${fInt(tracts.length)} census tracts. Click a county to see its tracts.`;
+    if (lvl === "county") note = `${popTxt} · ${tracts.filter((t) => t.properties.GEOID.startsWith(id)).length} census tracts. Click one for its profile.`;
+    if (lvl === "tract" && s && s.pop < 500) note = `${popTxt}. Small population: estimates for this tract have wide margins of error.`;
     const refKey = ref ? `<span class="reflegend"><i></i>${D.name}</span>` : "";
 
     panel.innerHTML = `<div class="ph"><div class="eyebrow">${eyebrow}</div><h2>${f.properties.name}</h2>${note ? `<div class="note">${note}</div>` : ""}</div>`;
     if (!s || !s.pop) { panel.insertAdjacentHTML("beforeend", `<p>No residents recorded in this area.</p>`); return; }
-    panel.insertAdjacentHTML("beforeend", `<div class="kpis">
-      <div class="kpi"><span class="k">Population</span><span class="v">${fInt(s.pop)}</span><span class="c">${has(s.m.density) ? fDens(s.m.density) + " per sq mi" : ""}</span></div>
-      ${kpi("Median age", id, "median_age")}${kpi("Median household income", id, "median_income")}${kpi("Bachelor's or higher", id, "pct_ba_plus")}</div>`);
 
     // the current topic: every figure in a compact table, then its charts
     const sec = document.createElement("div");
@@ -480,8 +483,49 @@
       ± values are 90% margins of error. Census tracts average about 4,000 residents, so small differences between tracts are often within the margin of error.</div>`);
   }
 
+  // ---------- overview (no map) ----------
+  const GLANCE = ["median_age", "median_income", "pct_ba_plus", "poverty", "pct_owner", "median_value", "pct_foreign_born", "mean_commute"];
+  const EXTREMES = ["median_income", "poverty", "pct_ba_plus", "median_age", "median_value", "pct_foreign_born", "pct_owner", "pct_seasonal"];
+  function drawOverview() {
+    const F = (id, v) => FMT[METRIC[id].fmt].f(v);
+    const tile = (label, value, unit) => `<div class="kpi"><span class="k">${label}</span><span class="v">${value}</span><span class="c">${unit}</span></div>`;
+    const tiles = [tile("Population", fInt(S0.pop), fDens(S0.m.density) + " people per square mile")]
+      .concat(GLANCE.map((id) => tile(METRIC[id].label, has(S0.m[id]) ? F(id, S0.m[id]) : "–", METRIC[id].unit)));
+    const cty = (d, id) => `<button class="lnk" data-topic="${METRIC[id].topic}" data-m="${id}" data-county="${d.f.properties.GEOID}">${d.f.properties.name.replace(/ County$/, "")}</button><span class="ev">${F(id, d.v)}</span>`;
+    const ext = EXTREMES.map((id) => {
+      const vals = counties.map((f) => ({ f, v: val(f.properties.GEOID, id) })).filter((d) => has(d.v)).sort((a, b) => b.v - a.v);
+      return `<tr><td><button class="lnk strong" data-topic="${METRIC[id].topic}" data-m="${id}">${METRIC[id].label}</button></td>
+        <td>${cty(vals[0], id)}</td><td>${cty(vals[vals.length - 1], id)}</td></tr>`;
+    }).join("");
+    const cards = TOPICS.map((t) => {
+      const names = t.metrics.filter((m) => !["pop", "density"].includes(m.id)).map((m) => m.label);
+      return `<button class="tcard" data-topic="${t.id}"><b>${t.label}</b><span>${names.slice(0, 4).join(" · ")}${names.length > 4 ? " · and more" : ""}</span></button>`;
+    }).join("");
+    ovEl.innerHTML = `
+      <div class="ov-lead">
+        <p class="standfirst">Who lives in ${D.name}, mapped from the whole state down to its ${fInt(tracts.length)} census tracts:
+          ${TOPICS.length} topics and ${Object.keys(METRIC).length} statistics from the U.S. Census Bureau's American Community Survey.</p>
+      </div>
+      <div class="ov-grid">
+        <section class="ov-sec ov-glance"><h2>${D.name} at a glance</h2><div class="kpis four">${tiles.join("")}</div></section>
+        <section class="ov-sec ov-ext"><h2>Highs and lows by county</h2>
+          <table class="ext"><thead><tr><th>Statistic</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>${ext}</tbody></table>
+          <p class="hint2">Click a statistic to map it, or a county to open its tracts.</p></section>
+        <section class="ov-sec ov-topics"><h2>What's in the atlas</h2><div class="tcards">${cards}</div></section>
+        <section class="ov-sec ov-about"><h2>How it works</h2><ul>
+          <li><b>Pick a topic</b> above, then a statistic. Counties are colored first; click one to zoom into its census tracts, then click a tract for its full profile.</li>
+          <li><b>Census tracts</b> are small neighborhoods of roughly 1,200 to 8,000 people, drawn by the Census Bureau to stay stable over time.</li>
+          <li><b>Colors</b> split places into 7 groups with equal numbers of places in each, from white (lowest) to deep blue (highest).</li>
+          <li><b>Data</b> are American Community Survey 2019–2023 five-year estimates, the most recent release that covers every tract.
+            They are survey estimates: ± figures are 90% margins of error, and small tracts carry wide ones.</li>
+          <li><b>Left out:</b> fertility. Tract-level birth counts are too small for the survey to measure reliably.</li>
+        </ul></section>
+      </div>`;
+    ovEl.querySelectorAll("[data-topic]").forEach((b) => b.addEventListener("click", () => goTopic(b.dataset.topic, b.dataset.m, b.dataset.county)));
+  }
+
   // ---------- boot ----------
   drawTopics(); drawMetrics();
-  new ResizeObserver(() => { if (st.view === "map") layout(); }).observe(mapbox);
+  new ResizeObserver(() => { if (st.view === "map" && !mainEl.hidden) layout(); }).observe(mapbox);
   layout(); update(false);
 })();

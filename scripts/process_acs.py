@@ -26,8 +26,8 @@ OUT = ROOT / "data" / "build"
 
 TABLES = [
     "b01001", "b01002", "b03002", "b04006", "b05002", "b08013", "b08301", "b08303", "b11001",
-    "b11016", "b12001", "b14001", "b15003", "b17001", "b18101", "b19001", "b19013", "b19083",
-    "b19301", "b20002", "b21001", "b23025", "b25002", "b25003", "b25004", "b25010", "b25034",
+    "b11016", "b12001", "b14001", "b15003", "b17001", "b19001", "b19013", "b19083",
+    "b21001", "b25002", "b25003", "b25004", "b25010", "b25034",
     "b25035", "b25044", "b25064", "b25070", "b25075", "b25077", "b27010", "c16001", "c17002",
     "c24010", "c24030",
 ]
@@ -170,17 +170,6 @@ INS = [
 ]
 INS_AGES = [("Under 19", 17, 2), ("19-34", 33, 18), ("35-64", 50, 34), ("65+", 66, 51)]
 
-# ---------------------------------------------------------------- disability (B18101)
-DIS_AGES = [("Under 5", 3), ("5-17", 6), ("18-34", 9), ("35-64", 12), ("65-74", 15), ("75+", 18)]
-
-
-def dis_rate(g, heads):
-    # each age group: header cell h, "with a disability" h+1, "no disability" h+2; women are +19
-    w = g.s("b18101", [h + o + 1 for h in heads for o in (0, 19)])
-    t = g.s("b18101", [h + o + k for h in heads for o in (0, 19) for k in (1, 2)])
-    return P(w, t)
-
-
 def mean_vehicles(g):
     t = g("b25044", 1)
     if not t:
@@ -309,23 +298,6 @@ TOPICS = [
         C("hh_size", "Household size", "hist", ["1", "2", "3", "4", "5", "6", "7+"],
           lambda g: [g("b11016", 10)] + [g.s("b11016", [n, n + 8]) for n in range(3, 9)], sub="people per household"),
     ]),
-    dict(id="edu", label="Education", metrics=[
-        M("pct_ba_plus", "Bachelor's or higher", "% of adults 25+", "pct", lambda g: P(g.s("b15003", rng(22, 25)), g("b15003", 1))),
-        M("pct_hs_plus", "High school or higher", "% of adults 25+", "pct",
-          lambda g: P(g("b15003", 1) - g.s("b15003", rng(2, 16)), g("b15003", 1)) if g("b15003", 1) else None),
-        M("pct_grad", "Graduate degree", "% of adults 25+", "pct", lambda g: P(g.s("b15003", [23, 24, 25]), g("b15003", 1))),
-        M("pct_college_students", "College & graduate students", "% of residents 3+ enrolled in college or grad school", "pct",
-          lambda g: P(g.s("b14001", [8, 9]), g("b14001", 1))),
-        M("pct_enrolled", "Enrolled in school", "% of residents 3+", "pct", lambda g: P(g("b14001", 2), g("b14001", 1))),
-    ], charts=[
-        C("edu", "Educational attainment", "share",
-          ["No HS diploma", "HS / GED", "Some college / Associate", "Bachelor's", "Graduate / Professional"],
-          lambda g: [g.s("b15003", rng(2, 16)), g.s("b15003", [17, 18]), g.s("b15003", [19, 20, 21]),
-                     g("b15003", 22), g.s("b15003", [23, 24, 25])], sub="adults 25+"),
-        C("enroll", "School enrollment", "share",
-          ["Preschool", "Kindergarten", "Grades 1-4", "Grades 5-8", "Grades 9-12", "College, undergraduate", "Graduate / professional"],
-          lambda g: [g("b14001", n) for n in range(3, 10)], sub="% of students"),
-    ]),
     dict(id="hhincome", label="Household Income", metrics=[
         M("median_income", "Median household income", "dollars, 2023-adjusted", "money",
           lambda g: g("b19013", 1), lambda g: g.m("b19013", 1)),
@@ -340,20 +312,6 @@ TOPICS = [
           ["<10k", "10-15k", "15-20k", "20-25k", "25-30k", "30-35k", "35-40k", "40-45k", "45-50k", "50-60k",
            "60-75k", "75-100k", "100-125k", "125-150k", "150-200k", "200k+"],
           lambda g: [g("b19001", n) for n in range(2, 18)], sub="share of households"),
-    ]),
-    dict(id="earnings", label="Individual Income", metrics=[
-        M("per_capita_income", "Per capita income", "dollars per resident, 2023-adjusted", "money",
-          lambda g: g("b19301", 1), lambda g: g.m("b19301", 1)),
-        M("median_earnings", "Median earnings", "dollars, workers 16+ with earnings", "money",
-          lambda g: g("b20002", 1), lambda g: g.m("b20002", 1)),
-        M("median_earnings_men", "Median earnings, men", "dollars", "money", lambda g: g("b20002", 2), lambda g: g.m("b20002", 2)),
-        M("median_earnings_women", "Median earnings, women", "dollars", "money", lambda g: g("b20002", 3), lambda g: g.m("b20002", 3)),
-        M("earnings_gap", "Women's earnings vs men's", "women's median earnings as % of men's", "pct",
-          lambda g: P(g("b20002", 3), g("b20002", 2))),
-    ], charts=[
-        C("earnings", "Income & earnings", "values", ["Per capita income", "Median earnings, all", "Men", "Women"],
-          lambda g: [g("b19301", 1), g("b20002", 1), g("b20002", 2), g("b20002", 3)], fmt="money",
-          sub="2023 dollars"),
     ]),
     dict(id="poverty", label="Poverty", metrics=[
         M("poverty", "Poverty rate", "% of residents below the poverty line", "pct", lambda g: P(g("b17001", 2), g("b17001", 1))),
@@ -372,14 +330,22 @@ TOPICS = [
         C("pov_age", "Poverty rate by age", "values", ["Under 18", "18-64", "65+"],
           lambda g: [pov_rate(g, POV_CHILD), pov_rate(g, POV_ADULT), pov_rate(g, POV_SENIOR)]),
     ]),
-    dict(id="employment", label="Employment", metrics=[
-        M("unemployment", "Unemployment rate", "% of civilian labor force", "pct", lambda g: P(g("b23025", 5), g("b23025", 3))),
-        M("lfp", "Labor force participation", "% of residents 16+ working or looking for work", "pct",
-          lambda g: P(g("b23025", 2), g("b23025", 1))),
-        M("emp_pop", "Employment rate", "% of residents 16+ who are employed", "pct", lambda g: P(g("b23025", 4), g("b23025", 1))),
+    dict(id="edu", label="Education", metrics=[
+        M("pct_ba_plus", "Bachelor's or higher", "% of adults 25+", "pct", lambda g: P(g.s("b15003", rng(22, 25)), g("b15003", 1))),
+        M("pct_hs_plus", "High school or higher", "% of adults 25+", "pct",
+          lambda g: P(g("b15003", 1) - g.s("b15003", rng(2, 16)), g("b15003", 1)) if g("b15003", 1) else None),
+        M("pct_grad", "Graduate degree", "% of adults 25+", "pct", lambda g: P(g.s("b15003", [23, 24, 25]), g("b15003", 1))),
+        M("pct_college_students", "College & graduate students", "% of residents 3+ enrolled in college or grad school", "pct",
+          lambda g: P(g.s("b14001", [8, 9]), g("b14001", 1))),
+        M("pct_enrolled", "Enrolled in school", "% of residents 3+", "pct", lambda g: P(g("b14001", 2), g("b14001", 1))),
     ], charts=[
-        C("emp", "Employment status", "share", ["Employed", "Unemployed", "Armed Forces", "Not in labor force"],
-          lambda g: [g("b23025", n) for n in (4, 5, 6, 7)], sub="residents 16+"),
+        C("edu", "Educational attainment", "share",
+          ["No HS diploma", "HS / GED", "Some college / Associate", "Bachelor's", "Graduate / Professional"],
+          lambda g: [g.s("b15003", rng(2, 16)), g.s("b15003", [17, 18]), g.s("b15003", [19, 20, 21]),
+                     g("b15003", 22), g.s("b15003", [23, 24, 25])], sub="adults 25+"),
+        C("enroll", "School enrollment", "share",
+          ["Preschool", "Kindergarten", "Grades 1-4", "Grades 5-8", "Grades 9-12", "College, undergraduate", "Graduate / professional"],
+          lambda g: [g("b14001", n) for n in range(3, 10)], sub="% of students"),
     ]),
     dict(id="occupations", label="Occupations", metrics=[
         M("occ_" + k, l, "% of employed residents", "pct", (lambda c: lambda g: P(occ(g, [c]), g("c24010", 1)))(OCC_MAJOR[k]))
@@ -467,16 +433,6 @@ TOPICS = [
     ], charts=[
         C("vet_age", "Veterans by age", "share", ["18-34", "35-54", "55-64", "65-74", "75+"],
           lambda g: [g.s("b21001", [n, n + 18]) for n in (8, 11, 14, 17, 20)], sub="% of veterans"),
-    ]),
-    dict(id="disability", label="Disability", metrics=[
-        M("disability", "With a disability", "% of civilian residents outside institutions", "pct",
-          lambda g: dis_rate(g, [h for _, h in DIS_AGES])),
-        M("disability_working", "With a disability, ages 18-64", "% of residents 18-64", "pct",
-          lambda g: dis_rate(g, [9, 12])),
-        M("disability_65", "With a disability, 65+", "% of residents 65+", "pct", lambda g: dis_rate(g, [15, 18])),
-    ], charts=[
-        C("dis_age", "Disability rate by age", "values", [l for l, _ in DIS_AGES],
-          lambda g: [dis_rate(g, [h]) for _, h in DIS_AGES]),
     ]),
 ]
 

@@ -9,7 +9,7 @@ RAW=data/raw
 mkdir -p "$RAW/shp"
 B="https://www2.census.gov/programs-surveys/acs/summary_file/$YEAR/table-based-SF/data/5YRData"
 TABLES="b01001 b01002 b03002 b04006 b05002 b08013 b08301 b08303 b11001 b11016 b12001 b14001 b15003
-  b17001 b18101 b19001 b19013 b19083 b19301 b20002 b21001 b23025 b25002 b25003 b25004 b25010 b25034
+  b17001 b19001 b19013 b19083 b21001 b25002 b25003 b25004 b25010 b25034
   b25035 b25044 b25064 b25070 b25075 b25077 b27010 c16001 c17002 c24010 c24030"
 mkdir -p "$RAW/doc"
 curl -sSf -o "$RAW/doc/ACS${YEAR}5YR_Table_Shells.txt" \

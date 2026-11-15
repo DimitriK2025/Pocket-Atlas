@@ -4,10 +4,11 @@ An interactive demographic atlas in the spirit of the old Statistical Atlas: cho
 maps of Wisconsin from the state down to individual census tracts, with a profile of
 any place you click.
 
-**Topics (19):** Age & Sex · Race & Ethnicity · Ancestry · Language · Place of Birth &
-citizenship · Marital Status · Households & Families · Education & school enrollment ·
-Household Income · Individual Income & earnings · Poverty · Employment · Occupations ·
-Industries · Commute · Housing · Health Insurance · Veterans · Disability.
+**Tabs:** an Overview page (statewide headline figures, county highs and lows, and a
+guide to the atlas), then 16 mapped topics: Age & Sex · Race & Ethnicity · Ancestry ·
+Language · Place of Birth & citizenship · Marital Status · Households & Families ·
+Household Income · Poverty · Education & school enrollment · Occupations · Industries ·
+Commute · Housing · Health Insurance · Veterans.
 
 **Data:** U.S. Census Bureau, American Community Survey 2019–2023 5-year estimates,
 and Census cartographic boundary files (1:500k).
