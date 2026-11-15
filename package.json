@@ -1,0 +1,11 @@
+{
+  "name": "atlas",
+  "private": true,
+  "description": "Interactive demographic atlas built from Census ACS 5-year data",
+  "scripts": {
+    "build": "bash scripts/build.sh"
+  },
+  "devDependencies": {
+    "mapshaper": "0.6.102"
+  }
+}

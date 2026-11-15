@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wisconsin Atlas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Public+Sans:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1 id="title">Atlas</h1>
+    <div class="source" id="source"></div>
+  </header>
+  <nav class="pickers" aria-label="Choose a statistic">
+    <div class="topics" id="topics" role="tablist"></div>
+    <div class="metrics" id="metrics"></div>
+  </nav>
+  <main class="main">
+    <section class="stage">
+      <div class="bar">
+        <div class="crumbs" id="crumbs" aria-label="Location"></div>
+        <div class="toggles">
+          <div class="seg" role="group" aria-label="Geography level">
+            <button id="lvl-county" data-level="county">Counties</button>
+            <button id="lvl-tract" data-level="tract">Tracts</button>
+          </div>
+          <div class="seg" role="group" aria-label="View">
+            <button id="view-map" data-view="map">Map</button>
+            <button id="view-table" data-view="table">Table</button>
+          </div>
+        </div>
+      </div>
+      <div class="mapbox" id="mapbox">
+        <svg id="map" aria-label="Choropleth map"></svg>
+        <div class="zoomctl">
+          <button id="zin" aria-label="Zoom in">+</button>
+          <button id="zout" aria-label="Zoom out">−</button>
+          <button id="zreset" aria-label="Reset zoom">⤢</button>
+        </div>
+        <div class="hint">Scroll or pinch to zoom · drag to pan · Esc to go back</div>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+      <div class="tablebox" id="tablebox" hidden></div>
+      <div class="legend" id="legend"></div>
+    </section>
+    <aside class="panel" id="panel" aria-live="polite"></aside>
+  </main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script src="data/wisconsin.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
