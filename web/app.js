@@ -78,8 +78,8 @@
   TOPICS.forEach((t) => t.metrics.forEach((m) => (METRIC[m.id] = Object.assign(m, { topic: t.id }))));
 
   // ---------- palettes (dataviz reference palette) ----------
-  // Sequential: near-white (lowest) -> deep claret red (highest), same in both themes.
-  const SEQ = ["#fff8f2", "#fcd9c4", "#f7ae8f", "#ee7f62", "#d9503f", "#b1252f", "#7a0a24"];
+  // Sequential: near-white (lowest) -> the chart blue #0f5499 (highest).
+  const SEQ = ["#f8fafc", "#d4e0ed", "#adc5dc", "#87aacc", "#618ebc", "#3871aa", "#0f5499"];
   const SEQ_DARK = SEQ;
   // Diverging (sex ratio): blue = more women, red = more men, neutral midpoint.
   const DIV = ["#0f5499", "#4f88c6", "#a9c9e8", "#f2e6dc", "#f7ae8f", "#d9503f", "#7a0a24"];
