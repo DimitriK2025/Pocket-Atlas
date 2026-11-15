@@ -4,8 +4,10 @@ An interactive demographic atlas in the spirit of the old Statistical Atlas: cho
 maps of Wisconsin from the state down to individual census tracts, with a profile of
 any place you click.
 
-**Topics:** population and density · race & ethnicity · age & sex · educational
-attainment · household income, poverty and inequality (Gini index).
+**Topics (19):** Age & Sex · Race & Ethnicity · Ancestry · Language · Place of Birth &
+citizenship · Marital Status · Households & Families · Education & school enrollment ·
+Household Income · Individual Income & earnings · Poverty · Employment · Occupations ·
+Industries · Commute · Housing · Health Insurance · Veterans · Disability.
 
 **Data:** U.S. Census Bureau, American Community Survey 2019–2023 5-year estimates,
 and Census cartographic boundary files (1:500k).
@@ -45,15 +47,17 @@ To build another state, pass its FIPS code and name, for example
 | `scripts/build_geo.sh` | Simplifies boundaries into compact TopoJSON |
 | `scripts/bundle.py` | Combines both into one `web/data/<state>.js` file |
 
-### ACS tables used
+### Adding or changing a statistic
 
-| Table | Contents |
-|---|---|
-| B01001 | Sex by age |
-| B01002 | Median age |
-| B03002 | Hispanic or Latino origin by race |
-| B15003 | Educational attainment, 25+ |
-| B17001 | Poverty status |
-| B19001 | Household income brackets |
-| B19013 | Median household income |
-| B19083 | Gini index |
+Every map, chart and label is defined in the `TOPICS` list in `scripts/process_acs.py`.
+Cell numbers refer to the Census table shells, which `scripts/download.sh` saves to
+`data/raw/doc/ACS20235YR_Table_Shells.txt`. Add the table name to `TABLES` and to the
+download list, add a metric or chart to a topic, and rebuild. The web page picks it up
+automatically.
+
+### Not included
+
+**Fertility** (births in the past 12 months, tables B13016/B13002) is published for
+tracts, but the estimates are too noisy to map: a typical Wisconsin tract has about 34
+recent births with a margin of error 91% the size of the estimate, and in 45% of tracts
+the margin is larger than the estimate itself.
