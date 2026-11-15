@@ -15,7 +15,10 @@ and Census cartographic boundary files (1:500k).
 
 ## Using it
 
-Open `web/index.html` in a browser. It needs an internet connection the first time,
+Live site: https://dimitrik2025.github.io/Wisconsin-Atlas/
+
+
+Open `docs/index.html` in a browser. It needs an internet connection the first time,
 to load the D3 mapping library and fonts.
 
 - Pick a topic, then a statistic.
@@ -38,15 +41,15 @@ bash scripts/build.sh 55 Wisconsin
 ```
 
 To build another state, pass its FIPS code and name, for example
-`bash scripts/build.sh 26 Michigan`. This writes `web/data/michigan.js`; point the
-`<script src="data/...">` line in `web/index.html` at it.
+`bash scripts/build.sh 26 Michigan`. This writes `docs/data/michigan.js`; point the
+`<script src="data/...">` line in `docs/index.html` at it.
 
 | Script | What it does |
 |---|---|
 | `scripts/download.sh` | Streams the national ACS table files and keeps one state's rows; downloads boundaries |
 | `scripts/process_acs.py` | Computes shares, medians and distributions for every state, county and tract |
 | `scripts/build_geo.sh` | Simplifies boundaries into compact TopoJSON |
-| `scripts/bundle.py` | Combines both into one `web/data/<state>.js` file |
+| `scripts/bundle.py` | Combines both into one `docs/data/<state>.js` file |
 
 ### Adding or changing a statistic
 
