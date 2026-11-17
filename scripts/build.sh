@@ -11,3 +11,4 @@ for f in $FIPS; do
 done
 bash scripts/build_region.sh
 python3 scripts/bundle.py
+python3 scripts/stamp.py

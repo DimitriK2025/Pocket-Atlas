@@ -158,7 +158,7 @@ tbody tr.on { background: var(--accent-soft); font-weight: 700; }
   grid-area: panel; min-height: 0; overflow-y: auto; background: var(--surface); border-top: 4px solid var(--ink);
   padding: 12px 2px 20px; display: grid; align-content: start; grid-auto-rows: max-content; gap: 22px;
 }
-.panel > * { max-width: 680px; }
+.panel > * { max-width: 820px; }
 .ph .crumbs { margin-bottom: 2px; }
 .ph .crumbs button { padding: 2px 0; }
 .ph .crumbs .here { color: var(--accent); padding: 2px 0; }
@@ -178,7 +178,7 @@ tbody tr.on { background: var(--accent-soft); font-weight: 700; }
 .sec h3 small { font-family: var(--font-body); font-size: 12px; color: var(--ink-3); font-weight: 400; }
 .sec .facts { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-2); margin-top: 6px; font-variant-numeric: tabular-nums; }
 .sec .facts b { color: var(--ink); }
-.sec svg { display: block; width: 100%; max-width: 680px; height: auto; overflow: visible; }
+.sec svg { display: block; width: 100%; max-width: 820px; height: auto; overflow: visible; }
 .sec svg text { fill: var(--ink-2); font-size: 11.5px; font-family: var(--font-body); }
 .sec svg text.val { fill: var(--ink); font-variant-numeric: tabular-nums; }
 .sec svg .refmark { stroke: var(--ref); stroke-width: 1.5px; }
@@ -207,15 +207,4 @@ tbody tr.on { background: var(--accent-soft); font-weight: 700; }
 .seg button:disabled { color: var(--ink-3); cursor: not-allowed; opacity: .6; }
 .seg button:disabled:hover { background: none; }
 
-/* Phones and narrow windows: stack the panel under the map and let the page scroll */
-@media (max-width: 900px) {
-  html, body { height: auto; }
-  .app { height: auto; grid-template-rows: auto auto; }
-  .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "controls" "map" "legend" "panel"; gap: 12px; }
-  .mapwrap { aspect-ratio: 1 / 1; }
-  .datapick { margin-left: 0; width: 100%; }
-  .panel { overflow: visible; }
-  .swatches i { width: 30px; }
-  .legend { flex-wrap: wrap; }
-}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

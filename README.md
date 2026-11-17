@@ -59,6 +59,10 @@ abbreviation there and run the build again.
 | `scripts/build_region.sh` | State outlines and counties for the whole region |
 | `scripts/bundle.py` | Writes `docs/data/region.js` (states, counties) and `docs/data/<state>.js` (tracts) |
 
+After changing anything in `docs/`, run `python3 scripts/stamp.py` (the build does this
+automatically). It adds a fresh version number to the page's file links so browsers load the
+new files instead of cached copies.
+
 ### Adding or changing a statistic
 
 Every map, chart and label is defined in the `TOPICS` list in `scripts/process_acs.py`.

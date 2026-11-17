@@ -151,7 +151,7 @@
     loadEl.textContent = `Loading ${s.name} census tracts…`;
     loadEl.hidden = false;
     const sc = document.createElement("script");
-    sc.src = "data/" + s.id + ".js";
+    sc.src = "data/" + s.id + ".js?v=" + (window.ATLAS_VERSION || "");
     sc.onload = () => {
       addTracts(fips, window.ATLAS_TRACTS[fips]);
       delete window.ATLAS_TRACTS[fips];
@@ -477,7 +477,7 @@
     }).on("pointerleave", () => (ctip.hidden = true));
   }
   // charts draw at the panel's real width so text stays a normal size
-  const chartW = (el) => Math.max(260, Math.min(680, Math.floor(el.getBoundingClientRect().width) || 340));
+  const chartW = (el) => Math.max(260, Math.min(820, Math.floor(el.getBoundingClientRect().width) || 340));
   const toShares = (arr, total) => {
     const t = total || d3.sum(arr, (v) => v || 0);
     return arr.map((v) => (t && has(v) ? (100 * v) / t : null));
