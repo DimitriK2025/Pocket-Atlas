@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 FIPS="${1:-55}"
 SHP=data/raw/shp
-mkdir -p data/build
+mkdir -p "data/build/$FIPS"
 npx mapshaper \
   -i "$SHP/cb_2023_us_state_500k.shp" name=state \
   -filter "STATEFP=='$FIPS'" -filter-fields GEOID,NAME \
@@ -15,4 +15,4 @@ npx mapshaper \
   -filter-fields GEOID,NAMELSAD,NAMELSADCO,ALAND \
   -rename-fields name=NAMELSAD,county=NAMELSADCO,aland=ALAND \
   -simplify 35% keep-shapes weighted target=tracts \
-  -o data/build/geo.json format=topojson quantization=100000 target=state,counties,tracts combine-layers
+  -o "data/build/$FIPS/geo.json" format=topojson quantization=100000 target=state,counties,tracts combine-layers

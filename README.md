@@ -1,8 +1,10 @@
-# Wisconsin Atlas
+# State Atlas
 
 An interactive demographic atlas in the spirit of the old Statistical Atlas: choropleth
-maps of Wisconsin from the state down to individual census tracts, with a profile of
-any place you click.
+maps from the whole state down to individual census tracts, with a profile of any place
+you click.
+
+**States:** Wisconsin and Illinois. Switch with the buttons next to the title.
 
 **Tabs:** an Overview page (statewide headline figures, county highs and lows, and a
 guide to the atlas), then 16 mapped topics: Age & Sex · Race & Ethnicity · Ancestry ·
@@ -15,11 +17,11 @@ and Census cartographic boundary files (1:500k).
 
 ## Using it
 
-Live site: https://dimitrik2025.github.io/Wisconsin-Atlas/
+Live site: https://dimitrik2025.github.io/Wisconsin-Atlas/ (Wisconsin) and
+https://dimitrik2025.github.io/Wisconsin-Atlas/#illinois (Illinois).
 
-
-Open `docs/index.html` in a browser. It needs an internet connection the first time,
-to load the D3 mapping library and fonts.
+You can also open `docs/index.html` straight from disk. It needs an internet connection
+to load the D3 mapping library and fonts. Each state's data loads only when you pick it.
 
 - Pick a topic, then a statistic.
 - Click a county to zoom in and see its census tracts. Click a tract for its profile.
@@ -38,18 +40,20 @@ Requires Python 3 with pandas, Node.js, curl and unzip.
 ```bash
 npm install
 bash scripts/build.sh 55 Wisconsin
+bash scripts/build.sh 17 Illinois
 ```
 
-To build another state, pass its FIPS code and name, for example
-`bash scripts/build.sh 26 Michigan`. This writes `docs/data/michigan.js`; point the
-`<script src="data/...">` line in `docs/index.html` at it.
+To add another state, pass its FIPS code and name, for example
+`bash scripts/build.sh 26 Michigan`. This writes `docs/data/michigan.js` and adds
+Michigan to `docs/data/states.js`, so it appears in the state switcher automatically.
+Raw downloads go to `data/raw/<FIPS>/` and are not committed.
 
 | Script | What it does |
 |---|---|
 | `scripts/download.sh` | Streams the national ACS table files and keeps one state's rows; downloads boundaries |
 | `scripts/process_acs.py` | Computes shares, medians and distributions for every state, county and tract |
 | `scripts/build_geo.sh` | Simplifies boundaries into compact TopoJSON |
-| `scripts/bundle.py` | Combines both into one `docs/data/<state>.js` file |
+| `scripts/bundle.py` | Combines both into `docs/data/<state>.js` and updates the state list |
 
 ### Adding or changing a statistic
 

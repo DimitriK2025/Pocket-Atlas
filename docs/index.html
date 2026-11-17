@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Wisconsin Atlas</title>
+<title>State Atlas</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,6 +14,7 @@
 <div class="app">
   <header class="top">
     <h1 id="title">Atlas</h1>
+    <nav class="states" id="states" aria-label="Choose a state"></nav>
     <div class="source" id="source"></div>
   </header>
   <nav class="pickers" aria-label="Choose a statistic">
@@ -54,7 +55,7 @@
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-<script src="data/wisconsin.js"></script>
+<script src="data/states.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

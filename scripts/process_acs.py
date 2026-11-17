@@ -1,8 +1,9 @@
 """Turn raw ACS 5-year table files into compact per-geography stats for the atlas.
 
-Input:  data/raw/<table>.dat  (pipe-delimited Census table-based summary files,
+Usage:  python3 scripts/process_acs.py <state FIPS>
+Input:  data/raw/<FIPS>/<table>.dat  (pipe-delimited Census table-based summary files,
         already filtered to one state's state/county/tract rows)
-Output: data/build/stats.json  {"meta": {...topic definitions...}, "geo": {geoid: {...}}}
+Output: data/build/<FIPS>/stats.json  {"meta": {...topic definitions...}, "geo": {geoid: {...}}}
 
 Everything the web page shows is defined in TOPICS below. Each topic has
   metrics: one number per place, mappable (id, label, unit, fmt, f=formula, moe=formula)
@@ -508,6 +509,10 @@ def meta():
 
 
 def main():
+    global RAW, OUT
+    fips = sys.argv[1] if len(sys.argv) > 1 else "55"
+    RAW = ROOT / "data" / "raw" / fips
+    OUT = ROOT / "data" / "build" / fips
     OUT.mkdir(parents=True, exist_ok=True)
     stats = build(load())
     (OUT / "stats.json").write_text(json.dumps({"meta": meta(), "geo": stats}, separators=(",", ":")))

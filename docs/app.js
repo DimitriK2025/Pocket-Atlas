@@ -1,6 +1,8 @@
-/* Atlas front end. Expects window.ATLAS_DATA (built by scripts/bundle.py), d3 and topojson.
+/* Atlas front end. Needs d3, topojson and window.ATLAS_STATES (docs/data/states.js).
+   The loader at the bottom picks a state from the address (#illinois), loads data/<state>.js,
+   which sets window.ATLAS_DATA, then calls atlasStart().
    Topics, metrics and charts are all described in ATLAS_DATA.meta (see scripts/process_acs.py). */
-(function () {
+window.atlasStart = function () {
   "use strict";
   const D = window.ATLAS_DATA;
   const STATE_ID = Object.keys(D.geo).find((k) => k.length === 2);
@@ -461,7 +463,7 @@
     const popTxt = s ? `Population ${fInt(s.pop)}` : "";
     let note = popTxt;
     if (lvl === "state") note = `${popTxt} · ${counties.length} counties · ${fInt(tracts.length)} census tracts. Click a county to see its tracts.`;
-    if (lvl === "county") note = `${popTxt} · ${tracts.filter((t) => t.properties.GEOID.startsWith(id)).length} census tracts. Click one for its profile.`;
+    if (lvl === "county") note = `${popTxt} · ${fInt(tracts.filter((t) => t.properties.GEOID.startsWith(id)).length)} census tracts. Click one for its profile.`;
     if (lvl === "tract" && s && s.pop < 500) note = `${popTxt}. Small population: estimates for this tract have wide margins of error.`;
     const refKey = ref ? `<span class="reflegend"><i></i>${D.name}</span>` : "";
 
@@ -482,7 +484,7 @@
     topic.charts.forEach((c) => {
       const cs = document.createElement("div");
       cs.className = "sec";
-      cs.innerHTML = `<h3>${c.title}<small>${ref ? refKey : c.sub}</small></h3>${ref && c.sub ? `<div class="csub">${c.sub}</div>` : ""}`;
+      cs.innerHTML = `<h3>${c.title}<small>${ref ? refKey : ""}</small></h3>${c.sub ? `<div class="csub">${c.sub}</div>` : ""}`;
       panel.appendChild(cs);
       drawChart(cs, c, s, ref);
     });
@@ -519,4 +521,35 @@
   drawTopics(); drawMetrics();
   new ResizeObserver(() => { if (st.view === "map" && !mainEl.hidden) layout(); }).observe(mapbox);
   layout(); update(false);
+};
+
+// ---------- state loader ----------
+(function () {
+  "use strict";
+  const states = window.ATLAS_STATES || [];
+  const want = decodeURIComponent(location.hash.slice(1)).toLowerCase();
+  const pick = states.find((s) => s.id === want) || states.find((s) => s.id === "wisconsin") || states[0];
+  const nav = document.getElementById("states");
+  if (nav && states.length > 1) {
+    nav.innerHTML = states.map((s) => `<button type="button" id="state-${s.id}" data-s="${s.id}" aria-pressed="${s.id === pick.id}">${s.name}</button>`).join("");
+    nav.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+      if (b.dataset.s !== pick.id) location.hash = b.dataset.s;
+    }));
+  }
+  window.addEventListener("hashchange", () => {
+    const h = decodeURIComponent(location.hash.slice(1)).toLowerCase();
+    if (states.some((s) => s.id === h) && h !== pick.id) location.reload();
+  });
+  if (!pick) return;
+  document.title = pick.name + " Atlas";
+  document.getElementById("title").innerHTML = pick.name + " <span>Atlas</span>";
+  const loading = document.getElementById("overview");
+  loading.hidden = false;
+  loading.innerHTML = `<p class="loading">Loading ${pick.name}\u2026</p>`;
+  document.getElementById("main").hidden = true;
+  const sc = document.createElement("script");
+  sc.src = "data/" + pick.id + ".js";
+  sc.onload = () => window.atlasStart();
+  sc.onerror = () => { loading.innerHTML = `<p class="loading">Could not load the data for ${pick.name}. Check your connection and reload the page.</p>`; };
+  document.body.appendChild(sc);
 })();
