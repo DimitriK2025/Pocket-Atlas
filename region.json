@@ -1,0 +1,12 @@
+{
+ "name": "Midwest",
+ "states": [
+  {"fips": "55", "name": "Wisconsin", "abbr": "WI"},
+  {"fips": "17", "name": "Illinois", "abbr": "IL"},
+  {"fips": "19", "name": "Iowa", "abbr": "IA"},
+  {"fips": "27", "name": "Minnesota", "abbr": "MN"},
+  {"fips": "26", "name": "Michigan", "abbr": "MI"},
+  {"fips": "18", "name": "Indiana", "abbr": "IN"},
+  {"fips": "39", "name": "Ohio", "abbr": "OH"}
+ ]
+}

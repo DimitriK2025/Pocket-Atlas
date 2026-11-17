@@ -1,31 +1,36 @@
-"""Combine one state's geometry + stats into docs/data/<state>.js, and refresh
-docs/data/states.js, the list of states the web page offers.
-Usage: python3 scripts/bundle.py <state FIPS> "<State Name>"
+"""Package the region for the web page.
+
+docs/data/region.js   state outlines + counties, and stats for every state and county,
+                      plus the topic definitions (loaded first)
+docs/data/<state>.js  one state's census tracts + their stats (loaded when the state is opened)
 """
 import json
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-fips = sys.argv[1] if len(sys.argv) > 1 else "55"
-name = sys.argv[2] if len(sys.argv) > 2 else "Wisconsin"
-slug = name.lower().replace(" ", "-")
-build = ROOT / "data" / "build" / fips
-geo = json.loads((build / "geo.json").read_text())
-stats = json.loads((build / "stats.json").read_text())
-payload = {"name": name, "slug": slug, "source": "ACS 5-year estimates, 2019-2023", "topo": geo, **stats}
+cfg = json.loads((ROOT / "region.json").read_text())
 out_dir = ROOT / "docs" / "data"
 out_dir.mkdir(parents=True, exist_ok=True)
-out = out_dir / f"{slug}.js"
-out.write_text("window.ATLAS_DATA = " + json.dumps(payload, separators=(",", ":")) + ";\n")
-print(f"wrote {out.relative_to(ROOT)} ({out.stat().st_size/1e6:.1f} MB)")
+for old in out_dir.glob("*"):  # clear earlier builds (old per-state layout, states list)
+    old.unlink()
 
-# state list: every bundled state, alphabetical
-reg_path = out_dir / "states.json"
-reg = json.loads(reg_path.read_text()) if reg_path.exists() else {}
-reg[slug] = name
-reg = dict(sorted(reg.items(), key=lambda kv: kv[1]))
-reg_path.write_text(json.dumps(reg, indent=1) + "\n")
-(out_dir / "states.js").write_text(
-    "window.ATLAS_STATES = " + json.dumps([{"id": k, "name": v} for k, v in reg.items()]) + ";\n")
-print("states:", ", ".join(reg.values()))
+geo, meta, states = {}, None, []
+for s in cfg["states"]:
+    fips, slug = s["fips"], s["name"].lower().replace(" ", "-")
+    stats = json.loads((ROOT / "data/build" / fips / "stats.json").read_text())
+    meta = stats["meta"]
+    tract_stats = {k: v for k, v in stats["geo"].items() if len(k) == 11}
+    geo.update({k: v for k, v in stats["geo"].items() if len(k) < 11})
+    topo = json.loads((ROOT / "data/build" / fips / "tracts.json").read_text())
+    payload = {"fips": fips, "topo": topo, "geo": tract_stats}
+    path = out_dir / f"{slug}.js"
+    path.write_text("window.ATLAS_TRACTS = window.ATLAS_TRACTS || {};\nwindow.ATLAS_TRACTS[" + json.dumps(fips) + "] = "
+                    + json.dumps(payload, separators=(",", ":")) + ";\n")
+    states.append({**s, "id": slug, "tracts": len(tract_stats)})
+    print(f"{path.relative_to(ROOT)}: {len(tract_stats)} tracts, {path.stat().st_size / 1e6:.1f} MB")
+
+region = {"name": cfg["name"], "source": "ACS 5-year estimates, 2019-2023", "states": states, "meta": meta,
+          "topo": json.loads((ROOT / "data/build/region/geo.json").read_text()), "geo": geo}
+path = out_dir / "region.js"
+path.write_text("window.ATLAS_REGION = " + json.dumps(region, separators=(",", ":")) + ";\n")
+print(f"{path.relative_to(ROOT)}: {len(geo)} states and counties, {path.stat().st_size / 1e6:.1f} MB")

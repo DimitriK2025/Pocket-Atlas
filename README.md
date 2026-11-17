@@ -1,13 +1,14 @@
-# State Atlas
+# Midwest Atlas
 
 An interactive demographic atlas in the spirit of the old Statistical Atlas: choropleth
-maps from the whole state down to individual census tracts, with a profile of any place
-you click.
+maps of seven Midwestern states, from the whole region down to individual census tracts,
+with a profile of any place you click.
 
-**States:** Wisconsin and Illinois. Switch with the buttons next to the title.
+**States:** Wisconsin, Illinois, Iowa, Minnesota, Michigan, Indiana and Ohio
+(623 counties, 15,089 census tracts, 56 million people).
 
-**Tabs:** an Overview page (statewide headline figures, county highs and lows, and a
-guide to the atlas), then 16 mapped topics: Age & Sex · Race & Ethnicity · Ancestry ·
+**Tabs:** an Overview page (the seven states side by side, and county highs and lows across
+the region), then 16 mapped topics: Age & Sex · Race & Ethnicity · Ancestry ·
 Language · Place of Birth & citizenship · Marital Status · Households & Families ·
 Household Income · Poverty · Education & school enrollment · Occupations · Industries ·
 Commute · Housing · Health Insurance · Veterans.
@@ -17,20 +18,25 @@ and Census cartographic boundary files (1:500k).
 
 ## Using it
 
-Live site: https://dimitrik2025.github.io/Wisconsin-Atlas/ (Wisconsin) and
-https://dimitrik2025.github.io/Wisconsin-Atlas/#illinois (Illinois).
+Live site: https://dimitrik2025.github.io/Wisconsin-Atlas/
+Open a state directly by adding its name, e.g. `#illinois` or `#ohio`.
 
 You can also open `docs/index.html` straight from disk. It needs an internet connection
-to load the D3 mapping library and fonts. Each state's data loads only when you pick it.
+to load the D3 mapping library and fonts.
 
 - Pick a topic, then a statistic.
-- Click a county to zoom in and see its census tracts. Click a tract for its profile.
-- **Counties / Tracts** switches the whole-state map between the two levels.
+- The map opens on the whole Midwest. **States / Counties** switches how it is shaded.
+- Click a state to open it, a county to see its census tracts, and a tract for its profile.
+  **Tracts** shows every tract in the open state. A state's tracts download the first time
+  you open them.
+- The **×** button (or Esc) steps back up one level.
 - **Table** lists every place on screen; click a column header to sort.
-- Hover anything for exact numbers. ± values are 90% margins of error.
-- Esc steps back up one level.
+- Hover anything for exact numbers. ± values are 90% margins of error. Counties and tracts
+  are compared with their own state.
 
 Map colors use 7 groups with equal numbers of places in each, so every color is used.
+Counties are grouped across the whole region, so colors mean the same thing in every state;
+tracts are grouped within their state.
 The sex-ratio map uses fixed breaks centered on 100 instead.
 
 ## Rebuilding the data
@@ -39,21 +45,19 @@ Requires Python 3 with pandas, Node.js, curl and unzip.
 
 ```bash
 npm install
-bash scripts/build.sh 55 Wisconsin
-bash scripts/build.sh 17 Illinois
+bash scripts/build.sh
 ```
 
-To add another state, pass its FIPS code and name, for example
-`bash scripts/build.sh 26 Michigan`. This writes `docs/data/michigan.js` and adds
-Michigan to `docs/data/states.js`, so it appears in the state switcher automatically.
-Raw downloads go to `data/raw/<FIPS>/` and are not committed.
+The states come from `region.json`. To add one, add its FIPS code, name and postal
+abbreviation there and run the build again.
 
 | Script | What it does |
 |---|---|
-| `scripts/download.sh` | Streams the national ACS table files and keeps one state's rows; downloads boundaries |
+| `scripts/download.sh` | Streams each national ACS table once and splits out the requested states' rows; downloads boundaries |
 | `scripts/process_acs.py` | Computes shares, medians and distributions for every state, county and tract |
-| `scripts/build_geo.sh` | Simplifies boundaries into compact TopoJSON |
-| `scripts/bundle.py` | Combines both into `docs/data/<state>.js` and updates the state list |
+| `scripts/build_geo.sh` | Simplifies one state's tract boundaries into compact TopoJSON |
+| `scripts/build_region.sh` | State outlines and counties for the whole region |
+| `scripts/bundle.py` | Writes `docs/data/region.js` (states, counties) and `docs/data/<state>.js` (tracts) |
 
 ### Adding or changing a statistic
 
@@ -66,6 +70,6 @@ automatically.
 ### Not included
 
 **Fertility** (births in the past 12 months, tables B13016/B13002) is published for
-tracts, but the estimates are too noisy to map: a typical Wisconsin tract has about 34
+tracts, but the estimates are too noisy to map: a typical tract has about 34
 recent births with a margin of error 91% the size of the estimate, and in 45% of tracts
 the margin is larger than the estimate itself.

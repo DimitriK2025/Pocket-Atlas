@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>State Atlas</title>
+<title>Midwest Atlas</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,8 +13,7 @@
 <body>
 <div class="app">
   <header class="top">
-    <h1 id="title">Atlas</h1>
-    <nav class="states" id="states" aria-label="Choose a state"></nav>
+    <h1 id="title">Midwest <span>Atlas</span></h1>
     <div class="source" id="source"></div>
   </header>
   <nav class="pickers" aria-label="Choose a statistic">
@@ -27,6 +26,7 @@
         <div class="crumbs" id="crumbs" aria-label="Location"></div>
         <div class="toggles">
           <div class="seg" role="group" aria-label="Geography level">
+            <button id="lvl-state" data-level="state">States</button>
             <button id="lvl-county" data-level="county">Counties</button>
             <button id="lvl-tract" data-level="tract">Tracts</button>
           </div>
@@ -43,7 +43,8 @@
           <button id="zout" aria-label="Zoom out">−</button>
           <button id="zreset" aria-label="Reset zoom">⤢</button>
         </div>
-        <div class="hint">Scroll or pinch to zoom · drag to pan · Esc to go back</div>
+        <div class="hint" id="maphint"></div>
+        <div class="maploading" id="maploading" hidden></div>
         <div class="tip" id="tip" hidden></div>
       </div>
       <div class="tablebox" id="tablebox" hidden></div>
@@ -55,7 +56,7 @@
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-<script src="data/states.js"></script>
+<script src="data/region.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

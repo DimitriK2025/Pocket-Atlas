@@ -1,18 +1,11 @@
 #!/usr/bin/env bash
-# Build simplified TopoJSON (state outline, counties, tracts) for one state.
+# Simplified census-tract TopoJSON for one state -> data/build/<FIPS>/tracts.json
 set -euo pipefail
 cd "$(dirname "$0")/.."
-FIPS="${1:-55}"
-SHP=data/raw/shp
+FIPS="${1:?state FIPS}"
 mkdir -p "data/build/$FIPS"
-npx mapshaper \
-  -i "$SHP/cb_2023_us_state_500k.shp" name=state \
-  -filter "STATEFP=='$FIPS'" -filter-fields GEOID,NAME \
-  -i "$SHP/cb_2023_us_county_500k.shp" name=counties \
-  -filter "STATEFP=='$FIPS'" -filter-fields GEOID,NAMELSAD,ALAND \
-  -rename-fields name=NAMELSAD,aland=ALAND \
-  -i "$SHP/cb_2023_${FIPS}_tract_500k.shp" name=tracts \
+npx mapshaper -i "data/raw/shp/cb_2023_${FIPS}_tract_500k.shp" name=tracts \
   -filter-fields GEOID,NAMELSAD,NAMELSADCO,ALAND \
   -rename-fields name=NAMELSAD,county=NAMELSADCO,aland=ALAND \
-  -simplify 35% keep-shapes weighted target=tracts \
-  -o "data/build/$FIPS/geo.json" format=topojson quantization=100000 target=state,counties,tracts combine-layers
+  -simplify 35% keep-shapes weighted \
+  -o "data/build/$FIPS/tracts.json" format=topojson quantization=100000

@@ -1,35 +1,40 @@
-/* Atlas front end. Needs d3, topojson and window.ATLAS_STATES (docs/data/states.js).
-   The loader at the bottom picks a state from the address (#illinois), loads data/<state>.js,
-   which sets window.ATLAS_DATA, then calls atlasStart().
-   Topics, metrics and charts are all described in ATLAS_DATA.meta (see scripts/process_acs.py). */
-window.atlasStart = function () {
+/* Midwest Atlas front end. Needs d3, topojson and window.ATLAS_REGION (docs/data/region.js).
+   The region file holds state outlines, counties and their statistics. Each state's census
+   tracts live in docs/data/<state>.js and load the first time that state's tracts are shown.
+   Topics, metrics and charts are all described in ATLAS_REGION.meta (see scripts/process_acs.py). */
+(function () {
   "use strict";
-  const D = window.ATLAS_DATA;
-  const STATE_ID = Object.keys(D.geo).find((k) => k.length === 2);
-  const S0 = D.geo[STATE_ID];
-  const RACE = D.meta.race;
+  const R = window.ATLAS_REGION;
+  const GEO = R.geo; // stats by GEOID; tract stats are merged in as states load
+  const META = R.meta, RACE = META.race;
+  const STATES = R.states; // [{fips, name, abbr, id, tracts}]
+  const SBY = new Map(STATES.map((s) => [s.fips, s]));
+  const SBYID = new Map(STATES.map((s) => [s.id, s]));
 
   // ---------- geometry ----------
-  const stateFeat = topojson.feature(D.topo, D.topo.objects.state).features[0];
-  const counties = topojson.feature(D.topo, D.topo.objects.counties).features;
-  const tracts = topojson.feature(D.topo, D.topo.objects.tracts).features;
-  const countyMesh = topojson.mesh(D.topo, D.topo.objects.counties, (a, b) => a !== b);
+  const stateFeats = topojson.feature(R.topo, R.topo.objects.states).features;
+  const countyFeats = topojson.feature(R.topo, R.topo.objects.counties).features;
+  const stateMesh = topojson.mesh(R.topo, R.topo.objects.states, (a, b) => a !== b);
+  const regionOutline = topojson.mesh(R.topo, R.topo.objects.states, (a, b) => a === b);
+  const countyMesh = topojson.mesh(R.topo, R.topo.objects.counties, (a, b) => a !== b);
+  const regionFeat = topojson.merge(R.topo, R.topo.objects.states.geometries);
   const byId = new Map();
-  counties.forEach((f) => { f.properties.level = "county"; byId.set(f.properties.GEOID, f); });
-  tracts.forEach((f) => { f.properties.level = "tract"; byId.set(f.properties.GEOID, f); });
-  stateFeat.properties.level = "state";
-  stateFeat.properties.name = D.name;
-  byId.set(STATE_ID, stateFeat);
+  stateFeats.forEach((f) => { const p = f.properties; p.level = "state"; p.name = p.NAME; byId.set(p.GEOID, f); });
+  countyFeats.forEach((f) => { const p = f.properties; p.level = "county"; p.state = p.GEOID.slice(0, 2); byId.set(p.GEOID, f); });
+  const tractFeats = {}; // state fips -> features (once loaded)
+  const tractSel = {};   // state fips -> d3 selection of paths
+  const countiesOf = (fips) => countyFeats.filter((f) => f.properties.state === fips);
 
   // derived: population density (people per square mile of land)
   const SQMI = 2589988.11;
-  let landTotal = 0;
-  counties.forEach((f) => (landTotal += +f.properties.aland));
-  [...counties, ...tracts].forEach((f) => {
-    const s = D.geo[f.properties.GEOID];
-    if (s) s.m.density = f.properties.aland > 0 ? s.pop / (f.properties.aland / SQMI) : null;
+  const land = {};
+  countyFeats.forEach((f) => {
+    const p = f.properties, s = GEO[p.GEOID];
+    land[p.state] = (land[p.state] || 0) + +p.aland;
+    if (s) s.m.density = p.aland > 0 ? s.pop / (p.aland / SQMI) : null;
   });
-  S0.m.density = S0.pop / (landTotal / SQMI);
+  STATES.forEach((s) => { const g = GEO[s.fips]; if (g) g.m.density = g.pop / (land[s.fips] / SQMI); });
+  const regionPop = d3.sum(STATES, (s) => (GEO[s.fips] ? GEO[s.fips].pop : 0));
 
   // ---------- formatting ----------
   const fInt = d3.format(",");
@@ -61,7 +66,7 @@ window.atlasStart = function () {
   }
 
   // ---------- topics / metrics ----------
-  const TOPICS = D.meta.topics;
+  const TOPICS = META.topics;
   const METRIC = {};
   TOPICS.forEach((t) => t.metrics.forEach((m) => (METRIC[m.id] = Object.assign(m, { topic: t.id }))));
 
@@ -74,45 +79,51 @@ window.atlasStart = function () {
   const CAT = ["#0f5499", "#990f3d", "#0d7680", "#e3a000", "#eb5e8d", "#593380"];
 
   // ---------- state ----------
-  const st = { topic: "overview", metric: "median_income", level: "county", focus: null, selected: STATE_ID, view: "map", sort: { key: "value", dir: -1 } };
+  // state: open state's FIPS (null = whole region); focus: open county; selected: profiled place (null = region)
+  const st = { topic: "overview", metric: "median_income", level: "state", state: null, focus: null, selected: null,
+    view: "map", sort: { key: "value", dir: -1 } };
+  const eff = () => (st.focus ? "tract" : st.state && st.level === "state" ? "county" : st.level);
 
   // ---------- DOM ----------
   const $ = (s) => document.querySelector(s);
   const topicsEl = $("#topics"), metricsEl = $("#metrics"), crumbsEl = $("#crumbs");
   const mainEl = $("#main"), ovEl = $("#overview");
   const mapbox = $("#mapbox"), tablebox = $("#tablebox"), legendEl = $("#legend"), panel = $("#panel"), tip = $("#tip");
-  document.title = D.name + " Atlas";
-  $("#title").innerHTML = D.name + " <span>Atlas</span>";
-  $("#source").textContent = "American Community Survey, " + D.source.replace("ACS 5-year estimates, ", "") + " 5-year estimates · U.S. Census Bureau";
+  const loadEl = $("#maploading"), hintEl = $("#maphint");
+  $("#source").textContent = "American Community Survey, " + R.source.replace("ACS 5-year estimates, ", "") + " 5-year estimates · U.S. Census Bureau";
 
   // ---------- map ----------
   const svg = d3.select("#map");
   const gZoom = svg.append("g");
+  const gState = gZoom.append("g");
   const gCounty = gZoom.append("g");
   const gTract = gZoom.append("g");
-  const meshPath = gZoom.append("path").attr("class", "mesh");
+  const countyMeshPath = gZoom.append("path").attr("class", "mesh");
+  const stateMeshPath = gZoom.append("path").attr("class", "statemesh");
   const outlinePath = gZoom.append("path").attr("class", "outline");
   const selHalo = gZoom.append("path").attr("class", "sel-halo");
   const selPath = gZoom.append("path").attr("class", "sel");
   let geoPath, W = 0, H = 0;
-  const zoom = d3.zoom().scaleExtent([1, 60]).on("zoom", (e) => gZoom.attr("transform", e.transform));
+  const zoom = d3.zoom().scaleExtent([1, 120]).on("zoom", (e) => gZoom.attr("transform", e.transform));
   svg.call(zoom).on("dblclick.zoom", null);
 
-  const countySel = gCounty.selectAll("path").data(counties).join("path").attr("class", "unit");
-  const tractSel = gTract.selectAll("path").data(tracts).join("path").attr("class", "unit");
+  const stateSel = gState.selectAll("path").data(stateFeats).join("path").attr("class", "unit");
+  const countySel = gCounty.selectAll("path").data(countyFeats).join("path").attr("class", "unit");
 
   function layout() {
     const r = mapbox.getBoundingClientRect();
     W = Math.max(r.width, 200); H = Math.max(r.height, 200);
     svg.attr("viewBox", [0, 0, W, H]);
-    const c = d3.geoCentroid(stateFeat);
-    const projection = d3.geoConicConformal().rotate([-c[0], 0]).parallels([c[1] - 2, c[1] + 2])
-      .fitExtent([[16, 16], [W - 16, H - 16]], stateFeat);
+    const c = d3.geoCentroid(regionFeat);
+    const projection = d3.geoConicConformal().rotate([-c[0], 0]).parallels([c[1] - 4, c[1] + 4])
+      .fitExtent([[16, 16], [W - 16, H - 16]], regionFeat);
     geoPath = d3.geoPath(projection);
+    stateSel.attr("d", geoPath);
     countySel.attr("d", geoPath);
-    tractSel.attr("d", geoPath);
-    meshPath.attr("d", geoPath(countyMesh));
-    outlinePath.attr("d", geoPath(stateFeat));
+    Object.values(tractSel).forEach((s) => s.attr("d", geoPath));
+    countyMeshPath.attr("d", geoPath(countyMesh));
+    stateMeshPath.attr("d", geoPath(stateMesh));
+    outlinePath.attr("d", geoPath(regionOutline));
     drawSelection();
     zoomToCurrent(false);
   }
@@ -120,23 +131,72 @@ window.atlasStart = function () {
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   function zoomToFeature(f, animate) {
     let t = d3.zoomIdentity;
-    if (f && f !== stateFeat) {
+    if (f) {
       const [[x0, y0], [x1, y1]] = geoPath.bounds(f);
-      const k = Math.min(40, 0.85 / Math.max((x1 - x0) / W, (y1 - y0) / H));
+      const k = Math.min(100, 0.88 / Math.max((x1 - x0) / W, (y1 - y0) / H));
       t = d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
     }
     (animate && !reduceMotion ? svg.transition().duration(750) : svg).call(zoom.transform, t);
   }
-  function zoomToCurrent(animate) { zoomToFeature(st.focus ? byId.get(st.focus) : null, animate); }
+  function zoomToCurrent(animate) { zoomToFeature(st.focus ? byId.get(st.focus) : st.state ? byId.get(st.state) : null, animate); }
+
+  // ---------- loading a state's tracts ----------
+  const pending = {};
+  window.ATLAS_TRACTS = window.ATLAS_TRACTS || {};
+  function ensureTracts(fips, cb) {
+    if (tractFeats[fips]) { if (cb) cb(); return; }
+    const s = SBY.get(fips);
+    const first = !pending[fips];
+    (pending[fips] = pending[fips] || []).push(cb);
+    if (!first) return;
+    loadEl.textContent = `Loading ${s.name} census tracts…`;
+    loadEl.hidden = false;
+    const sc = document.createElement("script");
+    sc.src = "data/" + s.id + ".js";
+    sc.onload = () => {
+      addTracts(fips, window.ATLAS_TRACTS[fips]);
+      delete window.ATLAS_TRACTS[fips];
+      loadEl.hidden = true;
+      const cbs = pending[fips]; delete pending[fips];
+      cbs.forEach((f) => f && f());
+    };
+    sc.onerror = () => {
+      delete pending[fips];
+      loadEl.textContent = `Couldn't load ${s.name}'s census tracts. Check your connection and try again.`;
+    };
+    document.body.appendChild(sc);
+  }
+  function addTracts(fips, T) {
+    Object.assign(GEO, T.geo);
+    const feats = topojson.feature(T.topo, T.topo.objects.tracts).features;
+    feats.forEach((f) => {
+      const p = f.properties, s = GEO[p.GEOID];
+      p.level = "tract"; p.state = fips; byId.set(p.GEOID, f);
+      if (s) s.m.density = p.aland > 0 ? s.pop / (p.aland / SQMI) : null;
+    });
+    tractFeats[fips] = feats;
+    const sel = gTract.append("g").selectAll("path").data(feats).join("path").attr("class", "unit");
+    if (geoPath) sel.attr("d", geoPath);
+    hookUnits(sel);
+    sel.on("click", (e, f) => { hideTip(); select(f.properties.GEOID); });
+    tractSel[fips] = sel;
+  }
 
   // ---------- classification ----------
   const has = (v) => v !== null && v !== undefined && !Number.isNaN(v);
-  const val = (id, mId) => { const s = D.geo[id]; return s ? s.m[mId || st.metric] : null; };
-  function refUnits() { return st.level === "county" && !st.focus ? counties : tracts; }
+  const val = (id, mId) => { const s = GEO[id]; return s ? s.m[mId || st.metric] : null; };
+  function refUnits() {
+    const L = eff();
+    if (L === "state") return stateFeats;
+    if (L === "county") return countyFeats;
+    return tractFeats[st.state] || [];
+  }
   function visibleUnits() {
-    if (st.level === "county" && !st.focus) return counties;
-    if (st.focus) return tracts.filter((f) => f.properties.GEOID.startsWith(st.focus));
-    return tracts;
+    const L = eff();
+    if (L === "state") return stateFeats;
+    if (L === "county") return st.state ? countiesOf(st.state) : countyFeats;
+    const t = tractFeats[st.state] || [];
+    return st.focus ? t.filter((f) => f.properties.GEOID.startsWith(st.focus)) : t;
   }
   let scale = null;
   function buildScale() {
@@ -161,28 +221,41 @@ window.atlasStart = function () {
 
   function paint() {
     buildScale();
-    const tractMode = st.level === "tract" || st.focus;
-    countySel.attr("fill", fillOf).classed("dim", !!st.focus).style("display", tractMode && !st.focus ? "none" : null);
-    tractSel.attr("fill", fillOf).style("display", (f) => {
-      if (!tractMode) return "none";
-      return st.focus && !f.properties.GEOID.startsWith(st.focus) ? "none" : null;
+    const L = eff();
+    stateSel.attr("fill", fillOf).style("display", L === "state" ? null : "none");
+    countySel.attr("fill", fillOf)
+      .style("display", (f) => {
+        const p = f.properties;
+        if (L === "state") return "none";
+        if (L === "tract") return (st.focus ? p.GEOID === st.focus : p.state === st.state) ? "none" : null;
+        return null;
+      })
+      .classed("dim", (f) => !!st.state && (L === "tract" || f.properties.state !== st.state));
+    Object.entries(tractSel).forEach(([fips, sel]) => {
+      const on = L === "tract" && fips === st.state;
+      sel.attr("fill", on ? fillOf : null)
+        .style("display", (f) => (on && (!st.focus || f.properties.GEOID.startsWith(st.focus)) ? null : "none"));
     });
+    countyMeshPath.style("display", L === "state" ? "none" : null);
+    hintEl.textContent = !st.state ? (L === "state" ? "Click a state to explore it" : "Click a county to see its census tracts")
+      : "Scroll or pinch to zoom · drag to pan · Esc to go back";
     drawLegend();
     if (st.view === "table") drawTable();
   }
 
   function drawSelection() {
-    const f = st.selected !== STATE_ID ? byId.get(st.selected) : null;
-    const d = f ? geoPath(f) : null;
+    const f = st.selected ? byId.get(st.selected) : null;
+    const d = f && geoPath ? geoPath(f) : null;
     selPath.attr("d", d); selHalo.attr("d", d);
   }
 
   // ---------- legend ----------
   function drawLegend() {
-    const m = METRIC[st.metric];
-    const where = st.level === "county" && !st.focus ? "counties" : "census tracts";
-    const how = m.type === "cat" ? "" : m.type === "div" ? " · fixed breaks" : " · 7 equal-count groups of " + where;
+    const m = METRIC[st.metric], L = eff();
+    const where = L === "state" ? null : L === "county" ? `${R.name} counties` : `${SBY.get(st.state).name} census tracts`;
+    const how = m.type === "cat" ? "" : m.type === "div" ? " · fixed breaks" : where ? ` · 7 equal-count groups of ${where}` : " · states shaded from lowest to highest";
     let h = `<div class="ltitle"><b>${m.label}</b>${m.unit}${how}</div>`;
+    if (L === "tract" && !tractFeats[st.state]) { legendEl.innerHTML = h; return; }
     if (scale.type === "cat") {
       h += `<div class="catlegend">${scale.present.map((i) => `<span><i style="background:${CAT[i]}"></i>${RACE[i]}</span>`).join("")}</div>`;
     } else {
@@ -200,9 +273,14 @@ window.atlasStart = function () {
     }
   }
 
-  // ---------- value formatting with margin of error ----------
+  // ---------- names and values ----------
+  function placeName(id) {
+    if (!id) return "The " + R.name;
+    const f = byId.get(id);
+    return f ? f.properties.name : id;
+  }
   function fmtVal(id, mId, withMoe = true) {
-    const m = METRIC[mId || st.metric], s = D.geo[id];
+    const m = METRIC[mId || st.metric], s = GEO[id];
     if (!s) return "No data";
     const v = s.m[m.id];
     if (!has(v)) return "No data";
@@ -213,10 +291,10 @@ window.atlasStart = function () {
 
   // ---------- tooltip ----------
   function showTip(e, f) {
-    const id = f.properties.GEOID, s = D.geo[id];
-    const sub = f.properties.level === "tract" ? f.properties.county : "";
-    tip.innerHTML = `<div class="tn">${f.properties.name}</div>${sub ? `<div class="tc">${sub}</div>` : ""}
-      <div class="tv"><span>${METRIC[st.metric].label}</span><b>${fmtVal(id)}</b></div>
+    const p = f.properties, s = GEO[p.GEOID], abbr = SBY.get(p.state || p.GEOID).abbr;
+    const sub = p.level === "tract" ? `${p.county}, ${abbr}` : p.level === "county" ? SBY.get(p.state).name : "";
+    tip.innerHTML = `<div class="tn">${p.name}</div>${sub ? `<div class="tc">${sub}</div>` : ""}
+      <div class="tv"><span>${METRIC[st.metric].label}</span><b>${fmtVal(p.GEOID)}</b></div>
       <div class="tv"><span>Population</span><b>${s ? fInt(s.pop) : "–"}</b></div>`;
     tip.hidden = false;
     const r = mapbox.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -226,19 +304,44 @@ window.atlasStart = function () {
     tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px";
   }
   function hideTip() { tip.hidden = true; }
-  [countySel, tractSel].forEach((sel) => sel.on("pointermove", (e, f) => { if (e.pointerType !== "touch") showTip(e, f); }).on("pointerleave", hideTip));
+  function hookUnits(sel) { sel.on("pointermove", (e, f) => { if (e.pointerType !== "touch") showTip(e, f); }).on("pointerleave", hideTip); }
+  hookUnits(stateSel); hookUnits(countySel);
 
-  // ---------- interaction ----------
+  // ---------- navigation ----------
+  stateSel.on("click", (e, f) => { hideTip(); focusState(f.properties.GEOID); });
   countySel.on("click", (e, f) => { hideTip(); focusCounty(f.properties.GEOID); });
-  tractSel.on("click", (e, f) => { hideTip(); select(f.properties.GEOID); });
 
-  function focusCounty(id) { st.focus = id; st.selected = id; update(true); }
-  function select(id) {
-    st.selected = id;
-    if (id.length === 11 && st.focus && !id.startsWith(st.focus)) st.focus = null;
-    update(false);
+  function setHash() {
+    const id = st.state ? SBY.get(st.state).id : "";
+    if (decodeURIComponent(location.hash.slice(1)) === id) return;
+    if (id) location.hash = id;
+    else { try { history.replaceState(null, "", location.pathname + location.search); } catch (err) { location.hash = ""; } }
   }
-  function goState() { st.focus = null; st.selected = STATE_ID; update(true); }
+  function focusState(fips) {
+    st.state = fips; st.focus = null; st.selected = fips;
+    if (st.level === "state") st.level = "county";
+    setHash();
+    update(true);
+    if (st.level === "tract") ensureTracts(fips, () => update(false));
+  }
+  function focusCounty(cid) {
+    st.state = cid.slice(0, 2); st.focus = cid; st.selected = cid;
+    setHash();
+    update(true);
+    ensureTracts(st.state, () => update(false));
+  }
+  function select(id) { st.selected = id; update(false); }
+  function goRegion() {
+    st.state = null; st.focus = null; st.selected = null;
+    if (st.level === "tract") st.level = "county";
+    setHash();
+    update(true);
+  }
+  function goUp() {
+    if (st.selected && st.selected.length === 11) { if (st.focus) select(st.focus); else focusState(st.state); }
+    else if (st.focus) focusState(st.state);
+    else if (st.state) goRegion();
+  }
   function update(rezoom) {
     const ov = st.topic === "overview";
     const wasHidden = mainEl.hidden;
@@ -249,30 +352,36 @@ window.atlasStart = function () {
     paint(); drawSelection(); drawCrumbs(); drawPanel(); syncResetButton();
     if (rezoom && !wasHidden) zoomToCurrent(true);
   }
-  function goTopic(tid, mid, county) {
+  function goTopic(tid, mid, target) {
     const t = TOPICS.find((x) => x.id === tid);
     st.topic = tid; st.metric = mid || t.metrics[0].id;
-    if (county) { st.level = "county"; st.focus = county; st.selected = county; }
-    drawMetrics(); update(false);
+    drawMetrics();
+    if (target && target.length === 5) { st.level = "county"; focusCounty(target); }
+    else if (target && target.length === 2) focusState(target);
+    else update(false);
     window.scrollTo(0, 0);
   }
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || st.topic === "overview") return;
-    if (st.selected.length === 11 && st.focus) select(st.focus);
-    else if (st.focus || st.selected !== STATE_ID) goState();
+    if (e.key === "Escape" && st.topic !== "overview") goUp();
+  });
+  window.addEventListener("hashchange", () => {
+    const s = SBYID.get(decodeURIComponent(location.hash.slice(1)).toLowerCase());
+    if (s && s.fips !== st.state) { if (st.topic === "overview") goTopic("hhincome", null, s.fips); else focusState(s.fips); }
+    else if (!s && st.state && !location.hash.slice(1)) goRegion();
   });
 
   function drawCrumbs() {
-    const parts = [{ id: STATE_ID, label: D.name }];
-    const sel = st.selected;
-    const cid = st.focus || (sel.length >= 5 ? sel.slice(0, 5) : null);
-    if (cid) parts.push({ id: cid, label: byId.get(cid).properties.name });
-    if (sel.length === 11) parts.push({ id: sel, label: byId.get(sel).properties.name });
+    const parts = [{ act: "region", label: "The " + R.name }];
+    if (st.state) parts.push({ act: "state", id: st.state, label: SBY.get(st.state).name });
+    if (st.focus) parts.push({ act: "county", id: st.focus, label: placeName(st.focus) });
+    if (st.selected && st.selected.length === 11) parts.push({ label: placeName(st.selected) });
     crumbsEl.innerHTML = parts.map((p, i) => i === parts.length - 1
       ? `<span class="here">${p.label}</span>`
-      : `<button data-id="${p.id}">${p.label}</button><span class="sep">›</span>`).join("");
+      : `<button data-act="${p.act}" data-id="${p.id || ""}">${p.label}</button><span class="sep">›</span>`).join("");
     crumbsEl.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
-      if (b.dataset.id === STATE_ID) goState(); else focusCounty(b.dataset.id);
+      if (b.dataset.act === "region") goRegion();
+      else if (b.dataset.act === "state") focusState(b.dataset.id);
+      else focusCounty(b.dataset.id);
     }));
   }
 
@@ -294,14 +403,26 @@ window.atlasStart = function () {
   function syncControls() {
     topicsEl.querySelectorAll("button").forEach((b) => b.setAttribute("aria-selected", b.dataset.t === st.topic));
     metricsEl.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.m === st.metric));
-    const lvl = st.focus ? "tract" : st.level;
-    document.querySelectorAll("[data-level]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.level === lvl));
+    const L = eff();
+    document.querySelectorAll("[data-level]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.level === L));
+    const tr = $("#lvl-tract");
+    tr.disabled = !st.state;
+    tr.title = st.state ? "" : "Open a state to see its census tracts";
     document.querySelectorAll("[data-view]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.view === st.view));
   }
   document.querySelectorAll("[data-level]").forEach((b) => b.addEventListener("click", () => {
-    st.level = b.dataset.level;
-    if (st.focus) { st.focus = null; if (st.level === "county") st.selected = STATE_ID; update(true); }
-    else update(false);
+    const lv = b.dataset.level;
+    if (lv === "state") { st.level = "state"; if (st.state) goRegion(); else update(false); return; }
+    if (lv === "county") {
+      st.level = "county";
+      if (st.focus) { st.focus = null; st.selected = st.state; update(true); } else update(false);
+      return;
+    }
+    if (!st.state) return;
+    st.level = "tract";
+    if (st.selected && st.selected.length === 11 && !st.focus) st.selected = st.state;
+    update(false);
+    ensureTracts(st.state, () => update(false));
   }));
   document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
     st.view = b.dataset.view;
@@ -312,23 +433,24 @@ window.atlasStart = function () {
   $("#zin").addEventListener("click", () => svg.transition().duration(300).call(zoom.scaleBy, 1.6));
   $("#zout").addEventListener("click", () => svg.transition().duration(300).call(zoom.scaleBy, 1 / 1.6));
   const zreset = $("#zreset");
-  zreset.addEventListener("click", () => { if (st.focus || st.selected !== STATE_ID) goState(); else zoomToCurrent(true); });
+  zreset.addEventListener("click", () => { if (st.state) goUp(); else zoomToCurrent(true); });
   function syncResetButton() {
-    const open = st.focus || st.selected !== STATE_ID;
-    zreset.textContent = open ? "\u00d7" : "\u2922";
-    zreset.setAttribute("aria-label", open ? "Close and return to " + D.name : "Reset zoom");
+    const open = !!st.state;
+    zreset.textContent = open ? "×" : "⤢";
+    zreset.setAttribute("aria-label", open ? "Close and go back one level" : "Reset zoom");
     zreset.title = open ? "Close" : "Reset zoom";
-    zreset.classList.toggle("close", !!open);
+    zreset.classList.toggle("close", open);
   }
 
   // ---------- table view ----------
   function drawTable() {
-    const m = METRIC[st.metric];
+    const m = METRIC[st.metric], L = eff();
     const units = visibleUnits();
-    const showCounty = units === tracts;
+    const extra = L === "tract" ? "county" : L === "county" && !st.state ? "state" : null;
     const rows = units.map((f) => {
-      const s = D.geo[f.properties.GEOID];
-      return { id: f.properties.GEOID, name: f.properties.name, county: f.properties.county || "", pop: s ? s.pop : null, value: s ? s.m[m.id] : null };
+      const p = f.properties, s = GEO[p.GEOID];
+      return { id: p.GEOID, name: p.name, extra: extra === "county" ? p.county : extra === "state" ? SBY.get(p.state).name : "",
+        pop: s ? s.pop : null, value: s ? s.m[m.id] : null };
     });
     const { key, dir } = st.sort;
     rows.sort((a, b) => {
@@ -338,18 +460,20 @@ window.atlasStart = function () {
     });
     const arrow = (k) => (st.sort.key === k ? (st.sort.dir > 0 ? " ▲" : " ▼") : "");
     tablebox.innerHTML = `<table><thead><tr>
-      <th data-k="name">Name${arrow("name")}</th>${showCounty ? `<th data-k="county">County${arrow("county")}</th>` : ""}
+      <th data-k="name">Name${arrow("name")}</th>${extra ? `<th data-k="extra">${extra === "county" ? "County" : "State"}${arrow("extra")}</th>` : ""}
       <th class="num" data-k="pop">Population${arrow("pop")}</th><th class="num" data-k="value">${m.label}${arrow("value")}</th></tr></thead>
-      <tbody>${rows.map((r) => `<tr data-id="${r.id}" class="${r.id === st.selected ? "on" : ""}"><td>${r.name}</td>${showCounty ? `<td>${r.county}</td>` : ""}
+      <tbody>${rows.map((r) => `<tr data-id="${r.id}" class="${r.id === st.selected ? "on" : ""}"><td>${r.name}</td>${extra ? `<td>${r.extra}</td>` : ""}
       <td class="num">${has(r.pop) ? fInt(r.pop) : "–"}</td><td class="num">${fmtVal(r.id)}</td></tr>`).join("")}</tbody></table>`;
     tablebox.querySelectorAll("th").forEach((th) => th.addEventListener("click", () => {
       const k = th.dataset.k;
-      st.sort = { key: k, dir: st.sort.key === k ? -st.sort.dir : k === "name" || k === "county" ? 1 : -1 };
+      st.sort = { key: k, dir: st.sort.key === k ? -st.sort.dir : k === "name" || k === "extra" ? 1 : -1 };
       drawTable();
     }));
     tablebox.querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => {
       const id = tr.dataset.id;
-      if (id.length === 5 && !st.focus) focusCounty(id); else select(id);
+      if (id.length === 2) focusState(id);
+      else if (id.length === 5 && !st.focus) focusCounty(id);
+      else select(id);
     }));
   }
 
@@ -370,13 +494,13 @@ window.atlasStart = function () {
     return arr.map((v) => (t && has(v) ? (100 * v) / t : null));
   };
 
-  // Bars with the label above each bar (labels can be long); optional state reference tick.
-  function bars(el, labels, values, refs, fmt, counts) {
+  // Bars with the label above each bar (labels can be long); optional reference tick and click handler.
+  function bars(el, labels, values, refs, fmt, counts, refName, onClick) {
     const F = FMT[fmt].f;
     const max = Math.max(d3.max(values, (v) => v || 0), refs ? d3.max(refs, (v) => v || 0) : 0) || 1;
     const w = 340, rowH = 30, bh = 9;
     const x = d3.scaleLinear([0, max], [0, w]);
-    const data = labels.map((l, i) => ({ l, v: values[i], r: refs ? refs[i] : null, c: counts ? counts[i] : null }));
+    const data = labels.map((l, i) => ({ l, i, v: values[i], r: refs ? refs[i] : null, c: counts ? counts[i] : null }));
     const s = d3.select(el).append("svg").attr("viewBox", [0, 0, w, data.length * rowH]).attr("role", "img");
     const g = s.selectAll("g").data(data).join("g").attr("transform", (d, i) => `translate(0,${i * rowH})`);
     g.append("rect").attr("width", w).attr("height", rowH).attr("fill", "transparent");
@@ -387,12 +511,13 @@ window.atlasStart = function () {
       .attr("width", (d) => (has(d.v) ? Math.max(d.v > 0 ? 2 : 0, x(d.v)) : 0)).attr("fill", "var(--bar)");
     if (refs) g.filter((d) => has(d.r)).append("line").attr("class", "refmark")
       .attr("x1", (d) => x(d.r)).attr("x2", (d) => x(d.r)).attr("y1", 14).attr("y2", 29);
+    if (onClick) g.style("cursor", "pointer").on("click", (e, d) => { ctip.hidden = true; onClick(d.i); });
     chartTip(g, (d) => `<div class="tn">${d.l}</div><div class="tv"><span>Value</span><b>${has(d.v) ? F(d.v) : "–"}</b></div>
       ${has(d.c) ? `<div class="tv"><span>Count</span><b>${fInt(d.c)}</b></div>` : ""}
-      ${has(d.r) ? `<div class="tv"><span>${D.name}</span><b>${F(d.r)}</b></div>` : ""}`);
+      ${has(d.r) ? `<div class="tv"><span>${refName}</span><b>${F(d.r)}</b></div>` : ""}`);
   }
 
-  function columns(el, labels, values, refs, counts) {
+  function columns(el, labels, values, refs, counts, refName) {
     const max = Math.max(d3.max(values, (v) => v || 0), refs ? d3.max(refs, (v) => v || 0) : 0) || 1;
     const w = 340, h = 120, bottom = 18, n = labels.length, gap = 2;
     const bw = (w - gap * (n - 1)) / n;
@@ -413,7 +538,7 @@ window.atlasStart = function () {
       .attr("text-anchor", n > 7 && i === n - 1 ? "end" : n > 7 && i === 0 ? "start" : "middle").style("font-size", "10.5px").text(labels[i]));
     chartTip(g, (d) => `<div class="tn">${d.l}</div><div class="tv"><span>Share</span><b>${d.v.toFixed(1)}%</b></div>
       ${has(d.c) ? `<div class="tv"><span>Count</span><b>${fInt(d.c)}</b></div>` : ""}
-      ${has(d.r) ? `<div class="tv"><span>${D.name}</span><b>${d.r.toFixed(1)}%</b></div>` : ""}`);
+      ${has(d.r) ? `<div class="tv"><span>${refName}</span><b>${d.r.toFixed(1)}%</b></div>` : ""}`);
   }
 
   function pyramid(el, counts, refCounts, labels) {
@@ -438,45 +563,74 @@ window.atlasStart = function () {
       <div class="tv"><span>Women</span><b>${fInt(d.cf)} · ${d.f.toFixed(1)}%</b></div>`);
   }
 
-  function drawChart(sec, c, s, ref) {
+  function drawChart(sec, c, s, ref, refName) {
     const cur = s.d[c.id], rd = ref ? ref.d[c.id] : null;
     if (!cur || cur.every((v) => !has(v) || v === 0)) { sec.insertAdjacentHTML("beforeend", `<p class="empty">No data for this place.</p>`); return; }
     if (c.kind === "pyramid") {
       sec.insertAdjacentHTML("beforeend", `<div class="pyrkey"><span><i style="background:var(--series-1)"></i>Men</span><span><i style="background:var(--series-2)"></i>Women</span></div>`);
       pyramid(sec, cur, rd, c.labels);
     } else if (c.kind === "values") {
-      bars(sec, c.labels, cur, rd, c.fmt);
+      bars(sec, c.labels, cur, rd, c.fmt, null, refName);
     } else if (c.kind === "hist") {
-      columns(sec, c.labels, toShares(cur), rd && toShares(rd), cur);
+      columns(sec, c.labels, toShares(cur), rd && toShares(rd), cur, refName);
     } else {
       const t = c.of_total ? (s.t || {})[c.id] : null, rt = c.of_total && ref ? (ref.t || {})[c.id] : null;
-      bars(sec, c.labels, toShares(cur, t), rd && toShares(rd, rt), "pct", cur);
+      bars(sec, c.labels, toShares(cur, t), rd && toShares(rd, rt), "pct", cur, refName);
     }
   }
 
   function drawPanel() {
-    const id = st.selected, f = byId.get(id), s = D.geo[id];
-    const lvl = f.properties.level;
-    const topic = TOPICS.find((t) => t.id === st.topic);
-    const eyebrow = lvl === "state" ? "State" : lvl === "county" ? "County" : "Census tract · " + f.properties.county;
-    const ref = id === STATE_ID ? null : S0;
+    const id = st.selected, topic = TOPICS.find((t) => t.id === st.topic);
+    const foot = `<div class="foot">Source: U.S. Census Bureau, American Community Survey 2019–2023 5-year estimates.
+      ± values are 90% margins of error. Census tracts average about 4,000 residents, so small differences between tracts are often within the margin of error.</div>`;
+
+    if (!id) {
+      // the whole region: compare the states on the current statistic
+      const m = METRIC[st.metric];
+      const nTracts = d3.sum(STATES, (s) => s.tracts);
+      panel.innerHTML = `<div class="ph"><div class="eyebrow">Region</div><h2>The ${R.name}</h2>
+        <div class="note">Population ${fInt(regionPop)} · ${STATES.length} states · ${fInt(countyFeats.length)} counties · ${fInt(nTracts)} census tracts. Click a state to explore it.</div></div>`;
+      const sec = document.createElement("div");
+      sec.className = "sec";
+      sec.innerHTML = `<h3>${m.label}<small>by state</small></h3><div class="csub">${m.unit}</div>`;
+      panel.appendChild(sec);
+      if (m.type === "cat") {
+        sec.insertAdjacentHTML("beforeend", `<table class="figs"><tbody>${STATES.map((s) => `<tr data-s="${s.fips}"><td>${s.name}</td><td class="num">${fmtVal(s.fips)}</td></tr>`).join("")}</tbody></table>`);
+        sec.querySelectorAll("tr[data-s]").forEach((tr) => tr.addEventListener("click", () => focusState(tr.dataset.s)));
+      } else {
+        const order = STATES.slice().sort((a, b) => (val(b.fips) ?? -Infinity) - (val(a.fips) ?? -Infinity));
+        bars(sec, order.map((s) => s.name), order.map((s) => val(s.fips)), null, m.fmt, null, "", (i) => focusState(order[i].fips));
+      }
+      sec.insertAdjacentHTML("beforeend", `<p class="hint2">Click a state's bar or the map to open it.</p>`);
+      panel.insertAdjacentHTML("beforeend", foot);
+      return;
+    }
+
+    const f = byId.get(id), s = GEO[id], p = f.properties, lvl = p.level;
+    const stateName = SBY.get(p.state || id).name;
+    const eyebrow = lvl === "state" ? "State" : lvl === "county" ? "County · " + stateName : `Census tract · ${p.county}, ${SBY.get(p.state).abbr}`;
+    const ref = lvl === "state" ? null : GEO[p.state];
+    const refName = ref ? stateName : "";
     const popTxt = s ? `Population ${fInt(s.pop)}` : "";
     let note = popTxt;
-    if (lvl === "state") note = `${popTxt} · ${counties.length} counties · ${fInt(tracts.length)} census tracts. Click a county to see its tracts.`;
-    if (lvl === "county") note = `${popTxt} · ${fInt(tracts.filter((t) => t.properties.GEOID.startsWith(id)).length)} census tracts. Click one for its profile.`;
+    if (lvl === "state") note = `${popTxt} · ${fInt(countiesOf(id).length)} counties · ${fInt(SBY.get(id).tracts)} census tracts. Click a county to see its tracts.`;
+    if (lvl === "county") {
+      const n = tractFeats[p.state] ? tractFeats[p.state].filter((t) => t.properties.GEOID.startsWith(id)).length : null;
+      note = `${popTxt}${n !== null ? ` · ${fInt(n)} census tracts` : ""}. Click a tract for its profile.`;
+    }
     if (lvl === "tract" && s && s.pop < 500) note = `${popTxt}. Small population: estimates for this tract have wide margins of error.`;
-    const refKey = ref ? `<span class="reflegend"><i></i>${D.name}</span>` : "";
+    const refKey = ref ? `<span class="reflegend"><i></i>${refName}</span>` : "";
 
-    panel.innerHTML = `<div class="ph"><div class="eyebrow">${eyebrow}</div><h2>${f.properties.name}</h2>${note ? `<div class="note">${note}</div>` : ""}</div>`;
+    panel.innerHTML = `<div class="ph"><div class="eyebrow">${eyebrow}</div><h2>${p.name}</h2>${note ? `<div class="note">${note}</div>` : ""}</div>`;
     if (!s || !s.pop) { panel.insertAdjacentHTML("beforeend", `<p>No residents recorded in this area.</p>`); return; }
 
     // the current topic: every figure in a compact table, then its charts
     const sec = document.createElement("div");
     sec.className = "sec";
-    sec.innerHTML = `<h3>${topic.label}${ref ? `<small>${D.name}</small>` : ""}</h3>
+    sec.innerHTML = `<h3>${topic.label}${ref ? `<small>${refName}</small>` : ""}</h3>
       <table class="figs"><tbody>${topic.metrics.filter((m) => m.type !== "cat").map((m) => {
         const on = m.id === st.metric ? ' class="on"' : "";
-        return `<tr${on} data-m="${m.id}"><td>${m.label}</td><td class="num">${fmtVal(id, m.id)}</td>${ref ? `<td class="num ref">${fmtVal(STATE_ID, m.id, false)}</td>` : ""}</tr>`;
+        return `<tr${on} data-m="${m.id}"><td>${m.label}</td><td class="num">${fmtVal(id, m.id)}</td>${ref ? `<td class="num ref">${fmtVal(p.state, m.id, false)}</td>` : ""}</tr>`;
       }).join("")}</tbody></table>`;
     panel.appendChild(sec);
     sec.querySelectorAll("tr[data-m]").forEach((tr) => tr.addEventListener("click", () => { st.metric = tr.dataset.m; update(false); }));
@@ -486,70 +640,46 @@ window.atlasStart = function () {
       cs.className = "sec";
       cs.innerHTML = `<h3>${c.title}<small>${ref ? refKey : ""}</small></h3>${c.sub ? `<div class="csub">${c.sub}</div>` : ""}`;
       panel.appendChild(cs);
-      drawChart(cs, c, s, ref);
+      drawChart(cs, c, s, ref, refName);
     });
-
-    panel.insertAdjacentHTML("beforeend", `<div class="foot">Source: U.S. Census Bureau, American Community Survey 2019–2023 5-year estimates.
-      ± values are 90% margins of error. Census tracts average about 4,000 residents, so small differences between tracts are often within the margin of error.</div>`);
+    panel.insertAdjacentHTML("beforeend", foot);
   }
 
   // ---------- overview (no map) ----------
-  const GLANCE = ["median_age", "median_income", "pct_ba_plus", "poverty", "pct_owner", "median_value", "pct_foreign_born", "mean_commute"];
+  const GLANCE = ["pop", "median_age", "median_income", "pct_ba_plus", "poverty", "pct_owner", "median_value", "pct_foreign_born", "mean_commute"];
   const EXTREMES = ["median_income", "poverty", "pct_ba_plus", "median_age", "median_value", "pct_foreign_born", "pct_owner", "pct_seasonal"];
   function drawOverview() {
     const F = (id, v) => FMT[METRIC[id].fmt].f(v);
-    const tile = (label, value, unit) => `<div class="kpi"><span class="k">${label}</span><span class="v">${value}</span><span class="c">${unit}</span></div>`;
-    const tiles = [tile("Population", fInt(S0.pop), fDens(S0.m.density) + " people per square mile")]
-      .concat(GLANCE.map((id) => tile(METRIC[id].label, has(S0.m[id]) ? F(id, S0.m[id]) : "–", METRIC[id].unit)));
-    const cty = (d, id) => `<button class="lnk" data-topic="${METRIC[id].topic}" data-m="${id}" data-county="${d.f.properties.GEOID}">${d.f.properties.name.replace(/ County$/, "")}</button><span class="ev">${F(id, d.v)}</span>`;
+    const head = STATES.map((s) => `<th class="num"><button class="lnk strong" data-topic="hhincome" data-target="${s.fips}">${s.name}</button></th>`).join("");
+    const rows = GLANCE.map((id) => {
+      const vals = STATES.map((s) => val(s.fips, id));
+      const hi = d3.max(vals);
+      return `<tr><td><button class="lnk strong" data-topic="${METRIC[id].topic}" data-m="${id}">${METRIC[id].label}</button><div class="mu">${METRIC[id].unit}</div></td>
+        ${vals.map((v) => `<td class="num${v === hi ? " hi" : ""}">${has(v) ? F(id, v) : "–"}</td>`).join("")}</tr>`;
+    }).join("");
+    const cty = (d, id) => `<button class="lnk" data-topic="${METRIC[id].topic}" data-m="${id}" data-target="${d.f.properties.GEOID}">${d.f.properties.name.replace(/ (County|Parish)$/, "")}, ${SBY.get(d.f.properties.state).abbr}</button><span class="ev">${F(id, d.v)}</span>`;
     const ext = EXTREMES.map((id) => {
-      const vals = counties.map((f) => ({ f, v: val(f.properties.GEOID, id) })).filter((d) => has(d.v)).sort((a, b) => b.v - a.v);
+      const vals = countyFeats.map((f) => ({ f, v: val(f.properties.GEOID, id) })).filter((d) => has(d.v)).sort((a, b) => b.v - a.v);
       return `<tr><td><button class="lnk strong" data-topic="${METRIC[id].topic}" data-m="${id}">${METRIC[id].label}</button></td>
         <td>${cty(vals[0], id)}</td><td>${cty(vals[vals.length - 1], id)}</td></tr>`;
     }).join("");
     ovEl.innerHTML = `
       <div class="ov-grid">
-        <section class="ov-sec ov-glance"><h2>${D.name} at a glance</h2><div class="kpis four">${tiles.join("")}</div></section>
+        <section class="ov-sec"><h2>The ${R.name} at a glance</h2>
+          <div class="scrollx"><table class="glance"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>
+          <p class="hint2">Highest value in each row in <b class="hi-key">bold blue</b>. Click a state to open its map.</p></section>
         <section class="ov-sec ov-ext"><h2>Highs and lows by county</h2>
           <table class="ext"><thead><tr><th>Statistic</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>${ext}</tbody></table>
-          <p class="hint2">Click a statistic to map it, or a county to open its tracts.</p></section>
+          <p class="hint2">Across all ${fInt(countyFeats.length)} counties. Click a statistic to map it, or a county to open its tracts.</p></section>
       </div>`;
-    ovEl.querySelectorAll("[data-topic]").forEach((b) => b.addEventListener("click", () => goTopic(b.dataset.topic, b.dataset.m, b.dataset.county)));
+    ovEl.querySelectorAll("[data-topic]").forEach((b) => b.addEventListener("click", () => goTopic(b.dataset.topic, b.dataset.m, b.dataset.target)));
   }
 
   // ---------- boot ----------
   drawTopics(); drawMetrics();
   new ResizeObserver(() => { if (st.view === "map" && !mainEl.hidden) layout(); }).observe(mapbox);
-  layout(); update(false);
-};
-
-// ---------- state loader ----------
-(function () {
-  "use strict";
-  const states = window.ATLAS_STATES || [];
-  const want = decodeURIComponent(location.hash.slice(1)).toLowerCase();
-  const pick = states.find((s) => s.id === want) || states.find((s) => s.id === "wisconsin") || states[0];
-  const nav = document.getElementById("states");
-  if (nav && states.length > 1) {
-    nav.innerHTML = states.map((s) => `<button type="button" id="state-${s.id}" data-s="${s.id}" aria-pressed="${s.id === pick.id}">${s.name}</button>`).join("");
-    nav.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
-      if (b.dataset.s !== pick.id) location.hash = b.dataset.s;
-    }));
-  }
-  window.addEventListener("hashchange", () => {
-    const h = decodeURIComponent(location.hash.slice(1)).toLowerCase();
-    if (states.some((s) => s.id === h) && h !== pick.id) location.reload();
-  });
-  if (!pick) return;
-  document.title = pick.name + " Atlas";
-  document.getElementById("title").innerHTML = pick.name + " <span>Atlas</span>";
-  const loading = document.getElementById("overview");
-  loading.hidden = false;
-  loading.innerHTML = `<p class="loading">Loading ${pick.name}\u2026</p>`;
-  document.getElementById("main").hidden = true;
-  const sc = document.createElement("script");
-  sc.src = "data/" + pick.id + ".js";
-  sc.onload = () => window.atlasStart();
-  sc.onerror = () => { loading.innerHTML = `<p class="loading">Could not load the data for ${pick.name}. Check your connection and reload the page.</p>`; };
-  document.body.appendChild(sc);
+  layout();
+  const start = SBYID.get(decodeURIComponent(location.hash.slice(1)).toLowerCase());
+  if (start) goTopic("hhincome", null, start.fips);
+  else update(false);
 })();
