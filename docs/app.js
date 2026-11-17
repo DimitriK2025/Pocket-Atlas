@@ -86,7 +86,7 @@
 
   // ---------- DOM ----------
   const $ = (s) => document.querySelector(s);
-  const selEl = $("#metric-select"), crumbsEl = $("#crumbs");
+  const selEl = $("#metric-select");
   const mapbox = $("#mapbox"), tablebox = $("#tablebox"), legendEl = $("#legend"), panel = $("#panel"), tip = $("#tip");
   const loadEl = $("#maploading"), hintEl = $("#maphint");
   $("#source").textContent = "American Community Survey, " + R.source.replace("ACS 5-year estimates, ", "") + " 5-year estimates · U.S. Census Bureau";
@@ -252,24 +252,33 @@
   function drawLegend() {
     const m = METRIC[st.metric], L = eff();
     const where = L === "state" ? null : L === "county" ? `${R.name} counties` : `${SBY.get(st.state).name} census tracts`;
-    const how = m.type === "cat" ? "" : m.type === "div" ? " · fixed breaks" : where ? ` · 7 equal-count groups of ${where}` : " · states shaded from lowest to highest";
-    let h = `<div class="ltitle"><b>${m.label}</b>${m.unit}${how}</div>`;
+    const how = m.type === "cat" ? "" : m.type === "div" ? " · fixed breaks" : where ? ` · 7 equal-count groups of ${where}` : " · states shaded lowest to highest";
+    let h = `<div class="ltitle" title="${m.label}: ${m.unit}${how}"><b>${m.label}</b><span>${m.unit}${how}</span></div>`;
     if (L === "tract" && !tractFeats[st.state]) { legendEl.innerHTML = h; return; }
     if (scale.type === "cat") {
-      h += `<div class="catlegend">${scale.present.map((i) => `<span><i style="background:${CAT[i]}"></i>${RACE[i]}</span>`).join("")}</div>`;
-    } else {
-      const n = scale.colors.length, w = 46, gap = 2, tick = FMT[m.fmt].t;
-      h += `<div class="scale"><div class="swatches">${scale.colors.map((c) => `<i style="background:${c}"></i>`).join("")}</div>
-        <div class="ticks" style="width:${n * w + (n - 1) * gap}px">${scale.th.map((t, i) => `<span style="left:${(i + 1) * (w + gap) - gap / 2}px">${tick(t)}</span>`).join("")}</div></div>`;
+      h += `<div class="catlegend">${scale.present.map((i) => `<span><i style="background:${CAT[i]}"></i>${RACE[i]}</span>`).join("")}
+        <span class="nd"><i></i>No data</span></div>`;
+      legendEl.innerHTML = h;
+      return;
     }
-    h += `<span class="nd"><i></i>No data / too few residents</span>`;
+    const tick = FMT[m.fmt].t;
+    h += `<div class="scale"><div class="swatches">${scale.colors.map((c) => `<i style="background:${c}"></i>`).join("")}<i class="ndsw"></i></div>
+      <div class="ticks">${scale.th.map((t) => `<span>${tick(t)}</span>`).join("")}<span class="ndt">No data</span></div></div>`;
     legendEl.innerHTML = h;
-    const sw = legendEl.querySelector(".swatches i");
-    if (sw && sw.offsetWidth && sw.offsetWidth !== 46) {
-      const w = sw.offsetWidth, gap = 2;
-      legendEl.querySelector(".ticks").style.width = scale.colors.length * (w + gap) + "px";
-      legendEl.querySelectorAll(".ticks span").forEach((s, i) => (s.style.left = (i + 1) * (w + gap) - gap / 2 + "px"));
-    }
+    placeTicks();
+  }
+  // tick labels sit on the boundaries between swatches
+  function placeTicks() {
+    const sw = [...legendEl.querySelectorAll(".swatches i")];
+    if (!sw.length) return;
+    const x0 = sw[0].getBoundingClientRect().left;
+    const ticks = legendEl.querySelector(".ticks");
+    ticks.style.width = sw[sw.length - 1].getBoundingClientRect().right - x0 + "px";
+    const spans = [...ticks.querySelectorAll("span")];
+    spans.forEach((s, i) => {
+      const r = s.classList.contains("ndt") ? sw[sw.length - 1].getBoundingClientRect() : sw[i].getBoundingClientRect();
+      s.style.left = (s.classList.contains("ndt") ? (r.left + r.right) / 2 : r.right + 1) - x0 + "px";
+    });
   }
 
   // ---------- names and values ----------
@@ -343,7 +352,7 @@
   }
   function update(rezoom) {
     syncControls();
-    paint(); drawSelection(); drawCrumbs(); drawPanel(); syncResetButton();
+    paint(); drawSelection(); drawPanel(); syncResetButton();
     if (rezoom) zoomToCurrent(true);
   }
   function setMetric(mid) { st.metric = mid; update(false); }
@@ -357,6 +366,8 @@
   });
 
   function drawCrumbs() {
+    const crumbsEl = document.getElementById("crumbs");
+    if (!crumbsEl) return;
     const parts = [{ act: "region", label: "The " + R.name }];
     if (st.state) parts.push({ act: "state", id: st.state, label: SBY.get(st.state).name });
     if (st.focus) parts.push({ act: "county", id: st.focus, label: placeName(st.focus) });
@@ -466,7 +477,7 @@
     }).on("pointerleave", () => (ctip.hidden = true));
   }
   // charts draw at the panel's real width so text stays a normal size
-  const chartW = (el) => Math.max(260, Math.min(560, Math.floor(el.getBoundingClientRect().width) || 340));
+  const chartW = (el) => Math.max(260, Math.min(680, Math.floor(el.getBoundingClientRect().width) || 340));
   const toShares = (arr, total) => {
     const t = total || d3.sum(arr, (v) => v || 0);
     return arr.map((v) => (t && has(v) ? (100 * v) / t : null));
@@ -566,12 +577,13 @@
       // the whole region: compare the states on the current statistic
       const m = METRIC[st.metric];
       const nTracts = d3.sum(STATES, (s) => s.tracts);
-      panel.innerHTML = `<div class="ph"><div class="eyebrow">Region</div><h2>The ${R.name}</h2>
+      panel.innerHTML = `<div class="ph"><nav class="crumbs" id="crumbs" aria-label="Location"></nav><h2>The ${R.name}</h2>
         <div class="note">Population ${fInt(regionPop)} · ${STATES.length} states · ${fInt(countyFeats.length)} counties · ${fInt(nTracts)} census tracts. Click a state to explore it.</div></div>`;
       const sec = document.createElement("div");
       sec.className = "sec";
       sec.innerHTML = `<h3>${m.label}<small>by state</small></h3><div class="csub">${m.unit}</div>`;
       panel.appendChild(sec);
+      drawCrumbs();
       if (m.type === "cat") {
         sec.insertAdjacentHTML("beforeend", `<table class="figs"><tbody>${STATES.map((s) => `<tr data-s="${s.fips}"><td>${s.name}</td><td class="num">${fmtVal(s.fips)}</td></tr>`).join("")}</tbody></table>`);
         sec.querySelectorAll("tr[data-s]").forEach((tr) => tr.addEventListener("click", () => focusState(tr.dataset.s)));
@@ -586,7 +598,6 @@
 
     const f = byId.get(id), s = GEO[id], p = f.properties, lvl = p.level;
     const stateName = SBY.get(p.state || id).name;
-    const eyebrow = lvl === "state" ? "State" : lvl === "county" ? "County · " + stateName : `Census tract · ${p.county}, ${SBY.get(p.state).abbr}`;
     const ref = lvl === "state" ? null : GEO[p.state];
     const refName = ref ? stateName : "";
     const popTxt = s ? `Population ${fInt(s.pop)}` : "";
@@ -599,7 +610,8 @@
     if (lvl === "tract" && s && s.pop < 500) note = `${popTxt}. Small population: estimates for this tract have wide margins of error.`;
     const refKey = ref ? `<span class="reflegend"><i></i>${refName}</span>` : "";
 
-    panel.innerHTML = `<div class="ph"><div class="eyebrow">${eyebrow}</div><h2>${p.name}</h2>${note ? `<div class="note">${note}</div>` : ""}</div>`;
+    panel.innerHTML = `<div class="ph"><nav class="crumbs" id="crumbs" aria-label="Location"></nav><h2>${p.name}</h2>${note ? `<div class="note">${note}</div>` : ""}</div>`;
+    drawCrumbs();
     if (!s || !s.pop) { panel.insertAdjacentHTML("beforeend", `<p>No residents recorded in this area.</p>`); return; }
 
     // the current topic: every figure in a compact table, then its charts

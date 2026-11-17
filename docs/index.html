@@ -16,26 +16,23 @@
     <h1 id="title">Midwest <span>Atlas</span></h1>
     <div class="source" id="source"></div>
     <div class="datapick">
-      <label for="metric-select">Data</label>
-      <select id="metric-select"></select>
+      <select id="metric-select" aria-label="Choose a statistic to map"></select>
     </div>
   </header>
   <main class="main" id="main">
-    <section class="stage">
-      <div class="bar">
-        <div class="crumbs" id="crumbs" aria-label="Location"></div>
-        <div class="toggles">
-          <div class="seg" role="group" aria-label="Geography level">
-            <button id="lvl-state" data-level="state">States</button>
-            <button id="lvl-county" data-level="county">Counties</button>
-            <button id="lvl-tract" data-level="tract">Tracts</button>
-          </div>
-          <div class="seg" role="group" aria-label="View">
-            <button id="view-map" data-view="map">Map</button>
-            <button id="view-table" data-view="table">Table</button>
-          </div>
-        </div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Geography level">
+        <button id="lvl-state" data-level="state">States</button>
+        <button id="lvl-county" data-level="county">Counties</button>
+        <button id="lvl-tract" data-level="tract">Tracts</button>
       </div>
+      <div class="seg" role="group" aria-label="View">
+        <button id="view-map" data-view="map">Map</button>
+        <button id="view-table" data-view="table">Table</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="mapwrap">
       <div class="mapbox" id="mapbox">
         <svg id="map" aria-label="Choropleth map"></svg>
         <div class="zoomctl">
@@ -48,8 +45,7 @@
         <div class="tip" id="tip" hidden></div>
       </div>
       <div class="tablebox" id="tablebox" hidden></div>
-      <div class="legend" id="legend"></div>
-    </section>
+    </div>
     <aside class="panel" id="panel" aria-live="polite"></aside>
   </main>
 </div>
