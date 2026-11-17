@@ -19,7 +19,7 @@ for s in cfg["states"]:
     fips, slug = s["fips"], s["name"].lower().replace(" ", "-")
     stats = json.loads((ROOT / "data/build" / fips / "stats.json").read_text())
     meta = stats["meta"]
-    tract_stats = {k: v for k, v in stats["geo"].items() if len(k) == 11}
+    tract_stats = {k: v for k, v in stats["geo"].items() if len(k) == 11}  # compact records
     geo.update({k: v for k, v in stats["geo"].items() if len(k) < 11})
     topo = json.loads((ROOT / "data/build" / fips / "tracts.json").read_text())
     payload = {"fips": fips, "topo": topo, "geo": tract_stats}

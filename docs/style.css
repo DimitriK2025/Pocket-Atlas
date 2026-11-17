@@ -59,8 +59,10 @@ button { font: inherit; color: inherit; }
 .top h1 span { font-weight: 400; color: var(--ink-2); }
 .loading { font-family: var(--font-display); font-size: 22px; color: var(--ink-2); margin: 24px 0; }
 .top .source { color: var(--ink-3); font-size: 13px; }
-.top { align-items: center; }
-.datapick { margin-left: auto; display: flex; width: min(520px, 42vw); }
+/* header uses the same two columns as the page below, so the menu sits centered over the data */
+.top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 28px; align-items: center; }
+.brand { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; min-width: 0; }
+.datapick { justify-self: center; display: flex; width: min(520px, 100%); }
 .datapick select {
   font: inherit; font-size: 15px; color: var(--ink); background-color: var(--raised);
   border: 1px solid var(--ink); border-radius: 2px; padding: 8px 36px; width: 100%;

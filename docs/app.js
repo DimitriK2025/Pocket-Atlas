@@ -1,4 +1,4 @@
-/* Midwest Atlas front end. Needs d3, topojson and window.ATLAS_REGION (docs/data/region.js).
+/* Pocket Atlas front end. Needs d3, topojson and window.ATLAS_REGION (docs/data/region.js).
    The region file holds state outlines, counties and their statistics. Each state's census
    tracts live in docs/data/<state>.js and load the first time that state's tracts are shown.
    Topics, metrics and charts are all described in ATLAS_REGION.meta (see scripts/process_acs.py). */
@@ -10,6 +10,18 @@
   const STATES = R.states; // [{fips, name, abbr, id, tracts}]
   const SBY = new Map(STATES.map((s) => [s.fips, s]));
   const SBYID = new Map(STATES.map((s) => [s.id, s]));
+
+  // stats arrive as compact arrays [pop, metrics, margins, charts, totals]; expand to objects
+  const ORD = META.order;
+  function expand(r) {
+    const [pop, M, E, D, T] = r, o = { pop, m: {}, moe: {}, d: {}, t: {} };
+    ORD.m.forEach((k, i) => (o.m[k] = M[i]));
+    ORD.e.forEach((k, i) => (o.moe[k] = E[i]));
+    ORD.d.forEach((k, i) => { if (D[i]) o.d[k] = D[i]; });
+    ORD.t.forEach((k, i) => (o.t[k] = T[i]));
+    return o;
+  }
+  for (const k in GEO) GEO[k] = expand(GEO[k]);
 
   // ---------- geometry ----------
   const stateFeats = topojson.feature(R.topo, R.topo.objects.states).features;
@@ -23,6 +35,7 @@
   countyFeats.forEach((f) => { const p = f.properties; p.level = "county"; p.state = p.GEOID.slice(0, 2); byId.set(p.GEOID, f); });
   const tractFeats = {}; // state fips -> features (once loaded)
   const tractSel = {};   // state fips -> d3 selection of paths
+  const tractCountyLines = {}; // state fips -> county borders traced from that state's tracts
   const countiesOf = (fips) => countyFeats.filter((f) => f.properties.state === fips);
 
   // derived: population density (people per square mile of land)
@@ -38,6 +51,7 @@
 
   // ---------- formatting ----------
   const fInt = d3.format(",");
+  const plural = (n, one, many) => `${fInt(n)} ${n === 1 ? one : many}`;
   const fDens = (v) => (v < 10 ? v.toFixed(1) : fInt(Math.round(v)));
   const FMT = {
     pct: { f: (v) => v.toFixed(1) + "%", t: (v) => (v < 10 && v % 1 ? v.toFixed(1) : Math.round(v)) + "%" },
@@ -98,12 +112,13 @@
   const gCounty = gZoom.append("g");
   const gTract = gZoom.append("g");
   const countyMeshPath = gZoom.append("path").attr("class", "mesh");
+  const tractCountyPath = gZoom.append("path").attr("class", "mesh");
   const stateMeshPath = gZoom.append("path").attr("class", "statemesh");
   const outlinePath = gZoom.append("path").attr("class", "outline");
   const selHalo = gZoom.append("path").attr("class", "sel-halo");
   const selPath = gZoom.append("path").attr("class", "sel");
   let geoPath, W = 0, H = 0;
-  const zoom = d3.zoom().scaleExtent([1, 120]).on("zoom", (e) => gZoom.attr("transform", e.transform));
+  const zoom = d3.zoom().scaleExtent([1, 3000]).on("zoom", (e) => gZoom.attr("transform", e.transform));
   svg.call(zoom).on("dblclick.zoom", null);
 
   const stateSel = gState.selectAll("path").data(stateFeats).join("path").attr("class", "unit");
@@ -113,14 +128,14 @@
     const r = mapbox.getBoundingClientRect();
     W = Math.max(r.width, 200); H = Math.max(r.height, 200);
     svg.attr("viewBox", [0, 0, W, H]);
-    const c = d3.geoCentroid(regionFeat);
-    const projection = d3.geoConicConformal().rotate([-c[0], 0]).parallels([c[1] - 4, c[1] + 4])
-      .fitExtent([[16, 16], [W - 16, H - 16]], regionFeat);
+    // Albers USA: lower 48 with Alaska and Hawaii as insets
+    const projection = d3.geoAlbersUsa().fitExtent([[16, 16], [W - 16, H - 16]], regionFeat);
     geoPath = d3.geoPath(projection);
     stateSel.attr("d", geoPath);
     countySel.attr("d", geoPath);
     Object.values(tractSel).forEach((s) => s.attr("d", geoPath));
     countyMeshPath.attr("d", geoPath(countyMesh));
+    tractCountyPath.attr("d", st.state && tractCountyLines[st.state] ? geoPath(tractCountyLines[st.state]) : null);
     stateMeshPath.attr("d", geoPath(stateMesh));
     outlinePath.attr("d", geoPath(regionOutline));
     drawSelection();
@@ -132,7 +147,7 @@
     let t = d3.zoomIdentity;
     if (f) {
       const [[x0, y0], [x1, y1]] = geoPath.bounds(f);
-      const k = Math.min(100, 0.88 / Math.max((x1 - x0) / W, (y1 - y0) / H));
+      const k = Math.min(2500, 0.88 / Math.max((x1 - x0) / W, (y1 - y0) / H));
       t = d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
     }
     (animate && !reduceMotion ? svg.transition().duration(750) : svg).call(zoom.transform, t);
@@ -166,7 +181,7 @@
     document.body.appendChild(sc);
   }
   function addTracts(fips, T) {
-    Object.assign(GEO, T.geo);
+    for (const k in T.geo) GEO[k] = expand(T.geo[k]);
     const feats = topojson.feature(T.topo, T.topo.objects.tracts).features;
     feats.forEach((f) => {
       const p = f.properties, s = GEO[p.GEOID];
@@ -174,6 +189,9 @@
       if (s) s.m.density = p.aland > 0 ? s.pop / (p.aland / SQMI) : null;
     });
     tractFeats[fips] = feats;
+    // county borders drawn from the tract shapes, so they line up exactly with the tracts
+    tractCountyLines[fips] = topojson.mesh(T.topo, T.topo.objects.tracts,
+      (a, b) => a !== b && a.properties.GEOID.slice(0, 5) !== b.properties.GEOID.slice(0, 5));
     const sel = gTract.append("g").selectAll("path").data(feats).join("path").attr("class", "unit");
     if (geoPath) sel.attr("d", geoPath);
     hookUnits(sel);
@@ -235,7 +253,9 @@
       sel.attr("fill", on ? fillOf : null)
         .style("display", (f) => (on && (!st.focus || f.properties.GEOID.startsWith(st.focus)) ? null : "none"));
     });
-    countyMeshPath.style("display", L === "state" ? "none" : null);
+    const tractLines = L === "tract" && tractCountyLines[st.state];
+    countyMeshPath.style("display", L === "state" || tractLines ? "none" : null);
+    tractCountyPath.attr("d", tractLines ? geoPath(tractCountyLines[st.state]) : null);
     hintEl.textContent = !st.state ? (L === "state" ? "Click a state to explore it" : "Click a county to see its census tracts")
       : "Scroll or pinch to zoom · drag to pan · Esc to go back";
     drawLegend();
@@ -578,7 +598,7 @@
       const m = METRIC[st.metric];
       const nTracts = d3.sum(STATES, (s) => s.tracts);
       panel.innerHTML = `<div class="ph"><nav class="crumbs" id="crumbs" aria-label="Location"></nav><h2>The ${R.name}</h2>
-        <div class="note">Population ${fInt(regionPop)} · ${STATES.length} states · ${fInt(countyFeats.length)} counties · ${fInt(nTracts)} census tracts. Click a state to explore it.</div></div>`;
+        <div class="note">Population ${fInt(regionPop)} · ${STATES.some((s) => s.abbr === "DC") ? `${STATES.length - 1} states and D.C.` : plural(STATES.length, "state", "states")} · ${fInt(countyFeats.length)} counties · ${fInt(nTracts)} census tracts. Click a state to explore it.</div></div>`;
       const sec = document.createElement("div");
       sec.className = "sec";
       sec.innerHTML = `<h3>${m.label}<small>by state</small></h3><div class="csub">${m.unit}</div>`;
@@ -602,10 +622,10 @@
     const refName = ref ? stateName : "";
     const popTxt = s ? `Population ${fInt(s.pop)}` : "";
     let note = popTxt;
-    if (lvl === "state") note = `${popTxt} · ${fInt(countiesOf(id).length)} counties · ${fInt(SBY.get(id).tracts)} census tracts. Click a county to see its tracts.`;
+    if (lvl === "state") note = `${popTxt} · ${plural(countiesOf(id).length, "county", "counties")} · ${plural(SBY.get(id).tracts, "census tract", "census tracts")}. Click a county to see its tracts.`;
     if (lvl === "county") {
       const n = tractFeats[p.state] ? tractFeats[p.state].filter((t) => t.properties.GEOID.startsWith(id)).length : null;
-      note = `${popTxt}${n !== null ? ` · ${fInt(n)} census tracts` : ""}. Click a tract for its profile.`;
+      note = `${popTxt}${n !== null ? ` · ${plural(n, "census tract", "census tracts")}` : ""}. Click a tract for its profile.`;
     }
     if (lvl === "tract" && s && s.pop < 500) note = `${popTxt}. Small population: estimates for this tract have wide margins of error.`;
     const refKey = ref ? `<span class="reflegend"><i></i>${refName}</span>` : "";

@@ -11,5 +11,5 @@ npx mapshaper \
   -i "$SHP/cb_2023_us_county_500k.shp" name=counties \
   -filter "[$LIST].indexOf(STATEFP) > -1" -filter-fields GEOID,NAMELSAD,ALAND \
   -rename-fields name=NAMELSAD,aland=ALAND \
-  -simplify 60% keep-shapes weighted target=counties \
+  -simplify 15% keep-shapes weighted target=counties \
   -o data/build/region/geo.json format=topojson quantization=100000 target=states,counties combine-layers

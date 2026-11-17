@@ -3,7 +3,7 @@
 Usage:  python3 scripts/process_acs.py <state FIPS>
 Input:  data/raw/<FIPS>/<table>.dat  (pipe-delimited Census table-based summary files,
         already filtered to one state's state/county/tract rows)
-Output: data/build/<FIPS>/stats.json  {"meta": {...topic definitions...}, "geo": {geoid: {...}}}
+Output: data/build/<FIPS>/stats.json  {"meta": {...topic definitions...}, "geo": {geoid: [compact record]}}
 
 Everything the web page shows is defined in TOPICS below. Each topic has
   metrics: one number per place, mappable (id, label, unit, fmt, f=formula, moe=formula)
@@ -457,6 +457,21 @@ def rnd(v, fmt):
     return int(v) if nd == 0 else v
 
 
+# Compact output: each place is [pop, metric values, margins of error, chart arrays, chart totals],
+# each list in the fixed order given by these lists (also written to meta so the page can decode).
+M_ORDER = [m for t in TOPICS for m in t["metrics"] if m["f"] is not None]
+E_ORDER = [m for m in M_ORDER if m["moe"]]
+D_ORDER = [c for t in TOPICS for c in t["charts"]]
+T_ORDER = [c for c in D_ORDER if c["t"]]
+
+
+def safe(f, g):
+    try:
+        return f(g)
+    except TypeError:  # an input cell is missing
+        return None
+
+
 def build(df):
     out = {}
     for geo, row in df.iterrows():
@@ -464,34 +479,15 @@ def build(df):
         p = pop(g)
         if p is None:
             continue
-        rec = {"pop": int(p), "m": {}, "moe": {}, "d": {}, "t": {}}
-        for topic in TOPICS:
-            for m in topic["metrics"]:
-                if m["f"] is None:
-                    continue
-                try:
-                    v = m["f"](g)
-                except TypeError:  # an input cell is missing
-                    v = None
-                rec["m"][m["id"]] = rnd(v, m["fmt"])
-                if m["moe"]:
-                    rec["moe"][m["id"]] = rnd(m["moe"](g), m["fmt"])
-            for c in topic["charts"]:
-                try:
-                    vals = c["f"](g)
-                except TypeError:
-                    vals = None
-                if vals is None:
-                    continue
-                fmt = c["fmt"] if c["kind"] == "values" else "int"
-                rec["d"][c["id"]] = [rnd(v, fmt) for v in vals]
-                if c["t"]:
-                    rec["t"][c["id"]] = rnd(c["t"](g), "int")
-        if not rec["moe"]:
-            del rec["moe"]
-        if not rec["t"]:
-            del rec["t"]
-        out[geo.split("US", 1)[1]] = rec
+        M = [rnd(safe(m["f"], g), m["fmt"]) for m in M_ORDER]
+        E = [rnd(safe(m["moe"], g), m["fmt"]) for m in E_ORDER]
+        D = []
+        for c in D_ORDER:
+            vals = safe(c["f"], g)
+            fmt = c["fmt"] if c["kind"] == "values" else "int"
+            D.append(None if vals is None else [rnd(v, fmt) for v in vals])
+        T = [rnd(safe(c["t"], g), "int") for c in T_ORDER]
+        out[geo.split("US", 1)[1]] = [int(p), M, E, D, T]
     return out
 
 
@@ -505,7 +501,9 @@ def meta():
             "charts": [{k: v for k, v in c.items() if k not in ("f", "t")} | {"of_total": bool(c["t"])}
                        for c in t["charts"]],
         })
-    return {"topics": topics, "race": [l for l, _ in RACE]}
+    return {"topics": topics, "race": [l for l, _ in RACE],
+            "order": {"m": [m["id"] for m in M_ORDER], "e": [m["id"] for m in E_ORDER],
+                      "d": [c["id"] for c in D_ORDER], "t": [c["id"] for c in T_ORDER]}}
 
 
 def main():

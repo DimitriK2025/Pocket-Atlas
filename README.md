@@ -1,11 +1,11 @@
-# Midwest Atlas
+# Pocket Atlas
 
-An interactive demographic atlas in the spirit of the old Statistical Atlas: choropleth
-maps of seven Midwestern states, from the whole region down to individual census tracts,
-with a profile of any place you click.
+An interactive demographic atlas of the United States in the spirit of the old Statistical
+Atlas: choropleth maps from the whole country down to individual census tracts, with a
+profile of any place you click.
 
-**States:** Wisconsin, Illinois, Iowa, Minnesota, Michigan, Indiana and Ohio
-(623 counties, 15,089 census tracts, 56 million people).
+**Coverage:** all 50 states and the District of Columbia: 3,144 counties, 84,400 census
+tracts, 332 million people. Alaska and Hawaii appear as insets.
 
 **Statistics:** 99, chosen from the **Data** menu and grouped into 16 topics: Age & Sex ·
 Race & Ethnicity · Ancestry · Language · Place of Birth & citizenship · Marital Status ·
@@ -18,14 +18,14 @@ and Census cartographic boundary files (1:500k).
 ## Using it
 
 Live site: https://dimitrik2025.github.io/Wisconsin-Atlas/
-Open a state directly by adding its name, e.g. `#illinois` or `#ohio`.
+Open a state directly by adding its name, e.g. `#illinois` or `#new-york`.
 
 You can also open `docs/index.html` straight from disk. It needs an internet connection
 to load the D3 mapping library and fonts.
 
 - Pick a statistic from the **Data** menu at the top right. The side panel shows every figure
   in that statistic's topic for the selected place; click a row to map it.
-- The map opens on the whole Midwest. **States / Counties** switches how it is shaded.
+- The map opens on the whole country. **States / Counties** switches how it is shaded.
 - Click a state to open it, a county to see its census tracts, and a tract for its profile.
   **Tracts** shows every tract in the open state. A state's tracts download the first time
   you open them.
@@ -35,7 +35,7 @@ to load the D3 mapping library and fonts.
   are compared with their own state.
 
 Map colors use 7 groups with equal numbers of places in each, so every color is used.
-Counties are grouped across the whole region, so colors mean the same thing in every state;
+Counties are grouped across the whole country, so colors mean the same thing in every state;
 tracts are grouped within their state.
 The sex-ratio map uses fixed breaks centered on 100 instead.
 
@@ -48,15 +48,19 @@ npm install
 bash scripts/build.sh
 ```
 
-The states come from `region.json`. To add one, add its FIPS code, name and postal
-abbreviation there and run the build again.
+The states come from `region.json`. The full build downloads about 700 MB of Census files
+and takes around 15 minutes.
+
+Data files are compact: each place is stored as arrays in a fixed order (listed in
+`meta.order`), which the page expands when it loads. `docs/data/region.js` (states and
+counties, about 10 MB) loads first; each state's tracts (0.1 to 15 MB) load when opened.
 
 | Script | What it does |
 |---|---|
 | `scripts/download.sh` | Streams each national ACS table once and splits out the requested states' rows; downloads boundaries |
 | `scripts/process_acs.py` | Computes shares, medians and distributions for every state, county and tract |
 | `scripts/build_geo.sh` | Simplifies one state's tract boundaries into compact TopoJSON |
-| `scripts/build_region.sh` | State outlines and counties for the whole region |
+| `scripts/build_region.sh` | State outlines and counties for the whole country |
 | `scripts/bundle.py` | Writes `docs/data/region.js` (states, counties) and `docs/data/<state>.js` (tracts) |
 
 After changing anything in `docs/`, run `python3 scripts/stamp.py` (the build does this
