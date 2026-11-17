@@ -7,11 +7,10 @@ with a profile of any place you click.
 **States:** Wisconsin, Illinois, Iowa, Minnesota, Michigan, Indiana and Ohio
 (623 counties, 15,089 census tracts, 56 million people).
 
-**Tabs:** an Overview page (the seven states side by side, and county highs and lows across
-the region), then 16 mapped topics: Age & Sex · Race & Ethnicity · Ancestry ·
-Language · Place of Birth & citizenship · Marital Status · Households & Families ·
-Household Income · Poverty · Education & school enrollment · Occupations · Industries ·
-Commute · Housing · Health Insurance · Veterans.
+**Statistics:** 99, chosen from the **Data** menu and grouped into 16 topics: Age & Sex ·
+Race & Ethnicity · Ancestry · Language · Place of Birth & citizenship · Marital Status ·
+Households & Families · Household Income · Poverty · Education & school enrollment ·
+Occupations · Industries · Commute · Housing · Health Insurance · Veterans.
 
 **Data:** U.S. Census Bureau, American Community Survey 2019–2023 5-year estimates,
 and Census cartographic boundary files (1:500k).
@@ -24,7 +23,8 @@ Open a state directly by adding its name, e.g. `#illinois` or `#ohio`.
 You can also open `docs/index.html` straight from disk. It needs an internet connection
 to load the D3 mapping library and fonts.
 
-- Pick a topic, then a statistic.
+- Pick a statistic from the **Data** menu at the top right. The side panel shows every figure
+  in that statistic's topic for the selected place; click a row to map it.
 - The map opens on the whole Midwest. **States / Counties** switches how it is shaded.
 - Click a state to open it, a county to see its census tracts, and a tract for its profile.
   **Tracts** shows every tract in the open state. A state's tracts download the first time

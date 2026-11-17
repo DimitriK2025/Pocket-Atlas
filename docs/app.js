@@ -80,14 +80,13 @@
 
   // ---------- state ----------
   // state: open state's FIPS (null = whole region); focus: open county; selected: profiled place (null = region)
-  const st = { topic: "overview", metric: "median_income", level: "state", state: null, focus: null, selected: null,
+  const st = { metric: "median_income", level: "state", state: null, focus: null, selected: null,
     view: "map", sort: { key: "value", dir: -1 } };
   const eff = () => (st.focus ? "tract" : st.state && st.level === "state" ? "county" : st.level);
 
   // ---------- DOM ----------
   const $ = (s) => document.querySelector(s);
-  const topicsEl = $("#topics"), metricsEl = $("#metrics"), crumbsEl = $("#crumbs");
-  const mainEl = $("#main"), ovEl = $("#overview");
+  const selEl = $("#metric-select"), crumbsEl = $("#crumbs");
   const mapbox = $("#mapbox"), tablebox = $("#tablebox"), legendEl = $("#legend"), panel = $("#panel"), tip = $("#tip");
   const loadEl = $("#maploading"), hintEl = $("#maphint");
   $("#source").textContent = "American Community Survey, " + R.source.replace("ACS 5-year estimates, ", "") + " 5-year estimates · U.S. Census Bureau";
@@ -343,30 +342,17 @@
     else if (st.state) goRegion();
   }
   function update(rezoom) {
-    const ov = st.topic === "overview";
-    const wasHidden = mainEl.hidden;
-    mainEl.hidden = ov; ovEl.hidden = !ov; metricsEl.hidden = ov;
     syncControls();
-    if (ov) { drawOverview(); return; }
-    if (wasHidden && st.view === "map") layout();
     paint(); drawSelection(); drawCrumbs(); drawPanel(); syncResetButton();
-    if (rezoom && !wasHidden) zoomToCurrent(true);
+    if (rezoom) zoomToCurrent(true);
   }
-  function goTopic(tid, mid, target) {
-    const t = TOPICS.find((x) => x.id === tid);
-    st.topic = tid; st.metric = mid || t.metrics[0].id;
-    drawMetrics();
-    if (target && target.length === 5) { st.level = "county"; focusCounty(target); }
-    else if (target && target.length === 2) focusState(target);
-    else update(false);
-    window.scrollTo(0, 0);
-  }
+  function setMetric(mid) { st.metric = mid; update(false); }
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && st.topic !== "overview") goUp();
+    if (e.key === "Escape" && document.activeElement !== selEl) goUp();
   });
   window.addEventListener("hashchange", () => {
     const s = SBYID.get(decodeURIComponent(location.hash.slice(1)).toLowerCase());
-    if (s && s.fips !== st.state) { if (st.topic === "overview") goTopic("hhincome", null, s.fips); else focusState(s.fips); }
+    if (s && s.fips !== st.state) focusState(s.fips);
     else if (!s && st.state && !location.hash.slice(1)) goRegion();
   });
 
@@ -386,23 +372,13 @@
   }
 
   // ---------- controls ----------
-  function drawTopics() {
-    topicsEl.innerHTML = [{ id: "overview", label: "Overview" }, ...TOPICS]
-      .map((t) => `<button class="topic" role="tab" id="topic-${t.id}" data-t="${t.id}">${t.label}</button>`).join("");
-    topicsEl.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
-      if (b.dataset.t === "overview") { st.topic = "overview"; update(false); }
-      else goTopic(b.dataset.t);
-    }));
-  }
-  function drawMetrics() {
-    const t = TOPICS.find((x) => x.id === st.topic);
-    if (!t) { metricsEl.innerHTML = ""; return; }
-    metricsEl.innerHTML = t.metrics.map((m) => `<button class="chip" id="metric-${m.id}" data-m="${m.id}">${m.label}</button>`).join("");
-    metricsEl.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { st.metric = b.dataset.m; update(false); }));
+  function drawSelect() {
+    selEl.innerHTML = TOPICS.map((t) => `<optgroup label="${t.label}">${t.metrics
+      .map((m) => `<option value="${m.id}">${m.label}</option>`).join("")}</optgroup>`).join("");
+    selEl.addEventListener("change", () => setMetric(selEl.value));
   }
   function syncControls() {
-    topicsEl.querySelectorAll("button").forEach((b) => b.setAttribute("aria-selected", b.dataset.t === st.topic));
-    metricsEl.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.m === st.metric));
+    selEl.value = st.metric;
     const L = eff();
     document.querySelectorAll("[data-level]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.level === L));
     const tr = $("#lvl-tract");
@@ -489,6 +465,8 @@
       ctip.style.left = x + "px"; ctip.style.top = e.clientY + 12 + "px";
     }).on("pointerleave", () => (ctip.hidden = true));
   }
+  // charts draw at the panel's real width so text stays a normal size
+  const chartW = (el) => Math.max(260, Math.min(560, Math.floor(el.getBoundingClientRect().width) || 340));
   const toShares = (arr, total) => {
     const t = total || d3.sum(arr, (v) => v || 0);
     return arr.map((v) => (t && has(v) ? (100 * v) / t : null));
@@ -498,7 +476,7 @@
   function bars(el, labels, values, refs, fmt, counts, refName, onClick) {
     const F = FMT[fmt].f;
     const max = Math.max(d3.max(values, (v) => v || 0), refs ? d3.max(refs, (v) => v || 0) : 0) || 1;
-    const w = 340, rowH = 30, bh = 9;
+    const w = chartW(el), rowH = 30, bh = 9;
     const x = d3.scaleLinear([0, max], [0, w]);
     const data = labels.map((l, i) => ({ l, i, v: values[i], r: refs ? refs[i] : null, c: counts ? counts[i] : null }));
     const s = d3.select(el).append("svg").attr("viewBox", [0, 0, w, data.length * rowH]).attr("role", "img");
@@ -519,7 +497,7 @@
 
   function columns(el, labels, values, refs, counts, refName) {
     const max = Math.max(d3.max(values, (v) => v || 0), refs ? d3.max(refs, (v) => v || 0) : 0) || 1;
-    const w = 340, h = 120, bottom = 18, n = labels.length, gap = 2;
+    const w = chartW(el), h = 130, bottom = 18, n = labels.length, gap = 2;
     const bw = (w - gap * (n - 1)) / n;
     const y = d3.scaleLinear([0, max], [0, h - bottom - 4]);
     const sv = d3.select(el).append("svg").attr("viewBox", [0, 0, w, h]).attr("role", "img");
@@ -547,7 +525,7 @@
     const bins = labels.map((b, i) => ({ b, m: (100 * counts[i]) / tot, f: (100 * counts[i + n]) / tot, cm: counts[i], cf: counts[i + n],
       rm: refCounts ? (100 * refCounts[i]) / rtot : null, rf: refCounts ? (100 * refCounts[i + n]) / rtot : null })).reverse();
     const max = d3.max(bins, (d) => Math.max(d.m, d.f, d.rm || 0, d.rf || 0)) || 1;
-    const w = 340, mid = 170, lab = 22, rowH = 13, bh = 11;
+    const w = chartW(el), mid = w / 2, lab = 22, rowH = 14, bh = 12;
     const x = d3.scaleLinear([0, max], [0, mid - lab - 4]);
     const sv = d3.select(el).append("svg").attr("viewBox", [0, 0, w, bins.length * rowH + 2]).attr("role", "img");
     const g = sv.selectAll("g").data(bins).join("g").attr("transform", (d, i) => `translate(0,${i * rowH})`);
@@ -580,7 +558,7 @@
   }
 
   function drawPanel() {
-    const id = st.selected, topic = TOPICS.find((t) => t.id === st.topic);
+    const id = st.selected, topic = TOPICS.find((t) => t.id === METRIC[st.metric].topic);
     const foot = `<div class="foot">Source: U.S. Census Bureau, American Community Survey 2019–2023 5-year estimates.
       ± values are 90% margins of error. Census tracts average about 4,000 residents, so small differences between tracts are often within the margin of error.</div>`;
 
@@ -633,7 +611,7 @@
         return `<tr${on} data-m="${m.id}"><td>${m.label}</td><td class="num">${fmtVal(id, m.id)}</td>${ref ? `<td class="num ref">${fmtVal(p.state, m.id, false)}</td>` : ""}</tr>`;
       }).join("")}</tbody></table>`;
     panel.appendChild(sec);
-    sec.querySelectorAll("tr[data-m]").forEach((tr) => tr.addEventListener("click", () => { st.metric = tr.dataset.m; update(false); }));
+    sec.querySelectorAll("tr[data-m]").forEach((tr) => tr.addEventListener("click", () => setMetric(tr.dataset.m)));
 
     topic.charts.forEach((c) => {
       const cs = document.createElement("div");
@@ -645,41 +623,17 @@
     panel.insertAdjacentHTML("beforeend", foot);
   }
 
-  // ---------- overview (no map) ----------
-  const GLANCE = ["pop", "median_age", "median_income", "pct_ba_plus", "poverty", "pct_owner", "median_value", "pct_foreign_born", "mean_commute"];
-  const EXTREMES = ["median_income", "poverty", "pct_ba_plus", "median_age", "median_value", "pct_foreign_born", "pct_owner", "pct_seasonal"];
-  function drawOverview() {
-    const F = (id, v) => FMT[METRIC[id].fmt].f(v);
-    const head = STATES.map((s) => `<th class="num"><button class="lnk strong" data-topic="hhincome" data-target="${s.fips}">${s.name}</button></th>`).join("");
-    const rows = GLANCE.map((id) => {
-      const vals = STATES.map((s) => val(s.fips, id));
-      const hi = d3.max(vals);
-      return `<tr><td><button class="lnk strong" data-topic="${METRIC[id].topic}" data-m="${id}">${METRIC[id].label}</button><div class="mu">${METRIC[id].unit}</div></td>
-        ${vals.map((v) => `<td class="num${v === hi ? " hi" : ""}">${has(v) ? F(id, v) : "–"}</td>`).join("")}</tr>`;
-    }).join("");
-    const cty = (d, id) => `<button class="lnk" data-topic="${METRIC[id].topic}" data-m="${id}" data-target="${d.f.properties.GEOID}">${d.f.properties.name.replace(/ (County|Parish)$/, "")}, ${SBY.get(d.f.properties.state).abbr}</button><span class="ev">${F(id, d.v)}</span>`;
-    const ext = EXTREMES.map((id) => {
-      const vals = countyFeats.map((f) => ({ f, v: val(f.properties.GEOID, id) })).filter((d) => has(d.v)).sort((a, b) => b.v - a.v);
-      return `<tr><td><button class="lnk strong" data-topic="${METRIC[id].topic}" data-m="${id}">${METRIC[id].label}</button></td>
-        <td>${cty(vals[0], id)}</td><td>${cty(vals[vals.length - 1], id)}</td></tr>`;
-    }).join("");
-    ovEl.innerHTML = `
-      <div class="ov-grid">
-        <section class="ov-sec"><h2>The ${R.name} at a glance</h2>
-          <div class="scrollx"><table class="glance"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>
-          <p class="hint2">Highest value in each row in <b class="hi-key">bold blue</b>. Click a state to open its map.</p></section>
-        <section class="ov-sec ov-ext"><h2>Highs and lows by county</h2>
-          <table class="ext"><thead><tr><th>Statistic</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>${ext}</tbody></table>
-          <p class="hint2">Across all ${fInt(countyFeats.length)} counties. Click a statistic to map it, or a county to open its tracts.</p></section>
-      </div>`;
-    ovEl.querySelectorAll("[data-topic]").forEach((b) => b.addEventListener("click", () => goTopic(b.dataset.topic, b.dataset.m, b.dataset.target)));
-  }
-
   // ---------- boot ----------
-  drawTopics(); drawMetrics();
-  new ResizeObserver(() => { if (st.view === "map" && !mainEl.hidden) layout(); }).observe(mapbox);
+  drawSelect();
+  new ResizeObserver(() => { if (st.view === "map") layout(); }).observe(mapbox);
+  let panelW = 0, redraw = null;
+  new ResizeObserver(([e]) => {
+    const w = Math.round(e.contentRect.width);
+    if (panelW && Math.abs(w - panelW) > 20) { clearTimeout(redraw); redraw = setTimeout(drawPanel, 150); }
+    panelW = w;
+  }).observe(panel);
   layout();
   const start = SBYID.get(decodeURIComponent(location.hash.slice(1)).toLowerCase());
-  if (start) goTopic("hhincome", null, start.fips);
+  if (start) focusState(start.fips);
   else update(false);
 })();
