@@ -17,7 +17,7 @@ and Census cartographic boundary files (1:500k).
 
 ## Using it
 
-Live site: https://dimitrik2025.github.io/Wisconsin-Atlas/
+Live site: https://dimitrik2025.github.io/Pocket-Atlas/
 Open a state directly by adding its name, e.g. `#illinois` or `#new-york`.
 
 You can also open `docs/index.html` straight from disk. It needs an internet connection
@@ -35,8 +35,9 @@ to load the D3 mapping library and fonts.
   are compared with their own state.
 
 Map colors use 7 groups with equal numbers of places in each, so every color is used.
-Counties are grouped across the whole country, so colors mean the same thing in every state;
-tracts are grouped within their state.
+On the national map, counties are grouped across the whole country, so colors mean the same
+thing everywhere. Once you open a state, its counties and tracts are grouped within that state,
+so you can see where things are concentrated inside it.
 The sex-ratio map uses fixed breaks centered on 100 instead.
 
 ## Rebuilding the data

@@ -205,7 +205,8 @@
   function refUnits() {
     const L = eff();
     if (L === "state") return stateFeats;
-    if (L === "county") return countyFeats;
+    // inside a state, its counties are colored against each other so differences within it show
+    if (L === "county") return st.state ? countiesOf(st.state) : countyFeats;
     return tractFeats[st.state] || [];
   }
   function visibleUnits() {
@@ -271,7 +272,8 @@
   // ---------- legend ----------
   function drawLegend() {
     const m = METRIC[st.metric], L = eff();
-    const where = L === "state" ? null : L === "county" ? `${R.name} counties` : `${SBY.get(st.state).name} census tracts`;
+    const where = L === "state" ? null : L === "county" ? `${st.state ? SBY.get(st.state).name : R.name} counties`
+      : `${SBY.get(st.state).name} census tracts`;
     const how = m.type === "cat" ? "" : m.type === "div" ? " · fixed breaks" : where ? ` · 7 equal-count groups of ${where}` : " · states shaded lowest to highest";
     let h = `<div class="ltitle" title="${m.label}: ${m.unit}${how}"><b>${m.label}</b><span>${m.unit}${how}</span></div>`;
     if (L === "tract" && !tractFeats[st.state]) { legendEl.innerHTML = h; return; }
