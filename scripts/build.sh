@@ -9,6 +9,8 @@ for f in $FIPS; do
   python3 scripts/process_acs.py "$f"
   bash scripts/build_geo.sh "$f"
 done
+bash scripts/download_zcta.sh
+bash scripts/build_zcta.sh
 bash scripts/build_region.sh
 python3 scripts/bundle.py
 python3 scripts/stamp.py

@@ -35,6 +35,9 @@
   countyFeats.forEach((f) => { const p = f.properties; p.level = "county"; p.state = p.GEOID.slice(0, 2); byId.set(p.GEOID, f); });
   const tractFeats = {}; // state fips -> features (once loaded)
   const tractSel = {};   // state fips -> d3 selection of paths
+  const zipFeats = {}, zipSel = {}; // the same for ZIP Code Tabulation Areas
+  // a tract id is 11 digits; ZIP ids are "Z" + 5 digits (so they never collide with county ids)
+  const isSub = (id) => !!id && (id.length === 11 || id[0] === "Z");
   const tractCountyLines = {}; // state fips -> county borders traced from that state's tracts
   const countiesOf = (fips) => countyFeats.filter((f) => f.properties.state === fips);
 
@@ -111,6 +114,7 @@
   const gState = gZoom.append("g");
   const gCounty = gZoom.append("g");
   const gTract = gZoom.append("g");
+  const gZip = gZoom.append("g");
   const countyMeshPath = gZoom.append("path").attr("class", "mesh");
   const tractCountyPath = gZoom.append("path").attr("class", "mesh");
   const stateMeshPath = gZoom.append("path").attr("class", "statemesh");
@@ -134,6 +138,7 @@
     stateSel.attr("d", geoPath);
     countySel.attr("d", geoPath);
     Object.values(tractSel).forEach((s) => s.attr("d", geoPath));
+    Object.values(zipSel).forEach((s) => s.attr("d", geoPath));
     countyMeshPath.attr("d", geoPath(countyMesh));
     tractCountyPath.attr("d", st.state && tractCountyLines[st.state] ? geoPath(tractCountyLines[st.state]) : null);
     stateMeshPath.attr("d", geoPath(stateMesh));
@@ -154,49 +159,61 @@
   }
   function zoomToCurrent(animate) { zoomToFeature(st.focus ? byId.get(st.focus) : st.state ? byId.get(st.state) : null, animate); }
 
-  // ---------- loading a state's tracts ----------
+  // ---------- loading a state's tracts or ZIP codes ----------
+  const LAYERS = {
+    tract: { feats: tractFeats, sel: tractSel, g: gTract, store: "ATLAS_TRACTS", noun: "census tracts", file: (s) => `data/${s.id}.js` },
+    zip: { feats: zipFeats, sel: zipSel, g: gZip, store: "ATLAS_ZIPS", noun: "ZIP codes", file: (s) => `data/zip/${s.id}.js` },
+  };
   const pending = {};
-  window.ATLAS_TRACTS = window.ATLAS_TRACTS || {};
-  function ensureTracts(fips, cb) {
-    if (tractFeats[fips]) { if (cb) cb(); return; }
-    const s = SBY.get(fips);
-    const first = !pending[fips];
-    (pending[fips] = pending[fips] || []).push(cb);
+  function ensureLayer(kind, fips, cb) {
+    const Ly = LAYERS[kind];
+    if (Ly.feats[fips]) { if (cb) cb(); return; }
+    const s = SBY.get(fips), key = kind + fips;
+    const first = !pending[key];
+    (pending[key] = pending[key] || []).push(cb);
     if (!first) return;
-    loadEl.textContent = `Loading ${s.name} census tracts…`;
+    loadEl.textContent = `Loading ${s.name} ${Ly.noun}\u2026`;
     loadEl.hidden = false;
+    window[Ly.store] = window[Ly.store] || {};
     const sc = document.createElement("script");
-    sc.src = "data/" + s.id + ".js?v=" + (window.ATLAS_VERSION || "");
+    sc.src = Ly.file(s) + "?v=" + (window.ATLAS_VERSION || "");
     sc.onload = () => {
-      addTracts(fips, window.ATLAS_TRACTS[fips]);
-      delete window.ATLAS_TRACTS[fips];
+      addLayer(kind, fips, window[Ly.store][fips]);
+      delete window[Ly.store][fips];
       loadEl.hidden = true;
-      const cbs = pending[fips]; delete pending[fips];
+      const cbs = pending[key]; delete pending[key];
       cbs.forEach((f) => f && f());
     };
     sc.onerror = () => {
-      delete pending[fips];
-      loadEl.textContent = `Couldn't load ${s.name}'s census tracts. Check your connection and try again.`;
+      delete pending[key];
+      loadEl.textContent = `Couldn't load ${s.name}'s ${Ly.noun}. Check your connection and try again.`;
     };
     document.body.appendChild(sc);
   }
-  function addTracts(fips, T) {
+  const ensureTracts = (fips, cb) => ensureLayer("tract", fips, cb);
+  function addLayer(kind, fips, T) {
+    const Ly = LAYERS[kind];
     for (const k in T.geo) GEO[k] = expand(T.geo[k]);
-    const feats = topojson.feature(T.topo, T.topo.objects.tracts).features;
+    const obj = Object.keys(T.topo.objects)[0];
+    const feats = topojson.feature(T.topo, T.topo.objects[obj]).features;
     feats.forEach((f) => {
-      const p = f.properties, s = GEO[p.GEOID];
-      p.level = "tract"; p.state = fips; byId.set(p.GEOID, f);
+      const p = f.properties;
+      if (kind === "zip") { p.GEOID = "Z" + p.zcta; p.name = "ZIP " + p.zcta; }
+      const s = GEO[p.GEOID];
+      p.level = kind; p.state = fips; byId.set(p.GEOID, f);
       if (s) s.m.density = p.aland > 0 ? s.pop / (p.aland / SQMI) : null;
     });
-    tractFeats[fips] = feats;
-    // county borders drawn from the tract shapes, so they line up exactly with the tracts
-    tractCountyLines[fips] = topojson.mesh(T.topo, T.topo.objects.tracts,
-      (a, b) => a !== b && a.properties.GEOID.slice(0, 5) !== b.properties.GEOID.slice(0, 5));
-    const sel = gTract.append("g").selectAll("path").data(feats).join("path").attr("class", "unit");
+    Ly.feats[fips] = feats;
+    if (kind === "tract") {
+      // county borders drawn from the tract shapes, so they line up exactly with the tracts
+      tractCountyLines[fips] = topojson.mesh(T.topo, T.topo.objects[obj],
+        (a, b) => a !== b && a.properties.GEOID.slice(0, 5) !== b.properties.GEOID.slice(0, 5));
+    }
+    const sel = Ly.g.append("g").selectAll("path").data(feats).join("path").attr("class", "unit");
     if (geoPath) sel.attr("d", geoPath);
     hookUnits(sel);
     sel.on("click", (e, f) => { hideTip(); select(f.properties.GEOID); });
-    tractSel[fips] = sel;
+    Ly.sel[fips] = sel;
   }
 
   // ---------- classification ----------
@@ -207,12 +224,14 @@
     if (L === "state") return stateFeats;
     // inside a state, its counties are colored against each other so differences within it show
     if (L === "county") return st.state ? countiesOf(st.state) : countyFeats;
+    if (L === "zip") return zipFeats[st.state] || [];
     return tractFeats[st.state] || [];
   }
   function visibleUnits() {
     const L = eff();
     if (L === "state") return stateFeats;
     if (L === "county") return st.state ? countiesOf(st.state) : countyFeats;
+    if (L === "zip") return zipFeats[st.state] || [];
     const t = tractFeats[st.state] || [];
     return st.focus ? t.filter((f) => f.properties.GEOID.startsWith(st.focus)) : t;
   }
@@ -246,9 +265,14 @@
         const p = f.properties;
         if (L === "state") return "none";
         if (L === "tract") return (st.focus ? p.GEOID === st.focus : p.state === st.state) ? "none" : null;
+        if (L === "zip") return p.state === st.state ? "none" : null;
         return null;
       })
-      .classed("dim", (f) => !!st.state && (L === "tract" || f.properties.state !== st.state));
+      .classed("dim", (f) => !!st.state && (L === "tract" || L === "zip" || f.properties.state !== st.state));
+    Object.entries(zipSel).forEach(([fips, sel]) => {
+      const on = L === "zip" && fips === st.state;
+      sel.attr("fill", on ? fillOf : null).style("display", on ? null : "none");
+    });
     Object.entries(tractSel).forEach(([fips, sel]) => {
       const on = L === "tract" && fips === st.state;
       sel.attr("fill", on ? fillOf : null)
@@ -273,10 +297,10 @@
   function drawLegend() {
     const m = METRIC[st.metric], L = eff();
     const where = L === "state" ? null : L === "county" ? `${st.state ? SBY.get(st.state).name : R.name} counties`
-      : `${SBY.get(st.state).name} census tracts`;
+      : L === "zip" ? `${SBY.get(st.state).name} ZIP codes` : `${SBY.get(st.state).name} census tracts`;
     const how = m.type === "cat" ? "" : m.type === "div" ? " · fixed breaks" : where ? ` · ${where}` : " · states shaded lowest to highest";
     let h = `<div class="ltitle" title="${m.label}: ${m.unit}${how}"><b>${m.label}</b><span>${m.unit}${how}</span></div>`;
-    if (L === "tract" && !tractFeats[st.state]) { legendEl.innerHTML = h; return; }
+    if ((L === "tract" && !tractFeats[st.state]) || (L === "zip" && !zipFeats[st.state])) { legendEl.innerHTML = h; return; }
     if (scale.type === "cat") {
       h += `<div class="catlegend">${scale.present.map((i) => `<span><i style="background:${CAT[i]}"></i>${RACE[i]}</span>`).join("")}
         <span class="nd"><i></i>No data</span></div>`;
@@ -322,7 +346,7 @@
   // ---------- tooltip ----------
   function showTip(e, f) {
     const p = f.properties, s = GEO[p.GEOID], abbr = SBY.get(p.state || p.GEOID).abbr;
-    const sub = p.level === "tract" ? `${p.county}, ${abbr}` : p.level === "county" ? SBY.get(p.state).name : "";
+    const sub = p.level === "tract" || p.level === "zip" ? `${p.county}, ${abbr}` : p.level === "county" ? SBY.get(p.state).name : "";
     tip.innerHTML = `<div class="tn">${p.name}</div>${sub ? `<div class="tc">${sub}</div>` : ""}
       <div class="tv"><span>${METRIC[st.metric].label}</span><b>${fmtVal(p.GEOID)}</b></div>
       <div class="tv"><span>Population</span><b>${s ? fInt(s.pop) : "–"}</b></div>`;
@@ -352,7 +376,7 @@
     if (st.level === "state") st.level = "county";
     setHash();
     update(true);
-    if (st.level === "tract") ensureTracts(fips, () => update(false));
+    if (st.level === "tract" || st.level === "zip") ensureLayer(st.level, fips, () => update(false));
   }
   function focusCounty(cid) {
     st.state = cid.slice(0, 2); st.focus = cid; st.selected = cid;
@@ -363,12 +387,12 @@
   function select(id) { st.selected = id; update(false); }
   function goRegion() {
     st.state = null; st.focus = null; st.selected = null;
-    if (st.level === "tract") st.level = "county";
+    if (st.level === "tract" || st.level === "zip") st.level = "county";
     setHash();
     update(true);
   }
   function goUp() {
-    if (st.selected && st.selected.length === 11) { if (st.focus) select(st.focus); else focusState(st.state); }
+    if (isSub(st.selected)) { if (st.focus) select(st.focus); else focusState(st.state); }
     else if (st.focus) focusState(st.state);
     else if (st.state) goRegion();
   }
@@ -393,7 +417,7 @@
     const parts = [{ act: "region", label: "The " + R.name }];
     if (st.state) parts.push({ act: "state", id: st.state, label: SBY.get(st.state).name });
     if (st.focus) parts.push({ act: "county", id: st.focus, label: placeName(st.focus) });
-    if (st.selected && st.selected.length === 11) parts.push({ label: placeName(st.selected) });
+    if (isSub(st.selected)) parts.push({ label: placeName(st.selected) });
     crumbsEl.innerHTML = parts.map((p, i) => i === parts.length - 1
       ? `<span class="here">${p.label}</span>`
       : `<button data-act="${p.act}" data-id="${p.id || ""}">${p.label}</button><span class="sep">›</span>`).join("");
@@ -414,9 +438,11 @@
     selEl.value = st.metric;
     const L = eff();
     document.querySelectorAll("[data-level]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.level === L));
-    const tr = $("#lvl-tract");
-    tr.disabled = !st.state;
-    tr.title = st.state ? "" : "Open a state to see its census tracts";
+    [["#lvl-tract", "census tracts"], ["#lvl-zip", "ZIP codes"]].forEach(([sel, noun]) => {
+      const b = $(sel);
+      b.disabled = !st.state;
+      b.title = st.state ? "" : `Open a state to see its ${noun}`;
+    });
     document.querySelectorAll("[data-view]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.view === st.view));
   }
   document.querySelectorAll("[data-level]").forEach((b) => b.addEventListener("click", () => {
@@ -428,10 +454,18 @@
       return;
     }
     if (!st.state) return;
-    st.level = "tract";
-    if (st.selected && st.selected.length === 11 && !st.focus) st.selected = st.state;
-    update(false);
-    ensureTracts(st.state, () => update(false));
+    st.level = lv;
+    if (lv === "zip") {
+      // ZIP codes don't nest inside counties, so show the whole state
+      const hadCounty = !!st.focus;
+      st.focus = null;
+      if (st.selected !== st.state && !(st.selected && st.selected[0] === "Z")) st.selected = st.state;
+      update(hadCounty);
+    } else {
+      if (isSub(st.selected) && !st.focus) st.selected = st.state;
+      update(false);
+    }
+    ensureLayer(lv, st.state, () => update(false));
   }));
   document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
     st.view = b.dataset.view;
@@ -455,7 +489,7 @@
   function drawTable() {
     const m = METRIC[st.metric], L = eff();
     const units = visibleUnits();
-    const extra = L === "tract" ? "county" : L === "county" && !st.state ? "state" : null;
+    const extra = L === "tract" || L === "zip" ? "county" : L === "county" && !st.state ? "state" : null;
     const rows = units.map((f) => {
       const p = f.properties, s = GEO[p.GEOID];
       return { id: p.GEOID, name: p.name, extra: extra === "county" ? p.county : extra === "state" ? SBY.get(p.state).name : "",
@@ -624,12 +658,13 @@
     const refName = ref ? stateName : "";
     const popTxt = s ? `Population ${fInt(s.pop)}` : "";
     let note = popTxt;
-    if (lvl === "state") note = `${popTxt} · ${plural(countiesOf(id).length, "county", "counties")} · ${plural(SBY.get(id).tracts, "census tract", "census tracts")}. Click a county to see its tracts.`;
+    if (lvl === "state") note = `${popTxt} · ${plural(countiesOf(id).length, "county", "counties")} · ${plural(SBY.get(id).tracts, "census tract", "census tracts")} · ${plural(SBY.get(id).zips || 0, "ZIP code", "ZIP codes")}. Click a county to see its tracts.`;
     if (lvl === "county") {
       const n = tractFeats[p.state] ? tractFeats[p.state].filter((t) => t.properties.GEOID.startsWith(id)).length : null;
       note = `${popTxt}${n !== null ? ` · ${plural(n, "census tract", "census tracts")}` : ""}. Click a tract for its profile.`;
     }
     if (lvl === "tract" && s && s.pop < 500) note = `${popTxt}. Small population: estimates for this tract have wide margins of error.`;
+    if (lvl === "zip") note = `${popTxt} · mostly in ${p.county}${s && s.pop < 500 ? ". Small population: estimates for this ZIP code have wide margins of error." : "."}`;
     const refKey = ref ? `<span class="reflegend"><i></i>${refName}</span>` : "";
 
     panel.innerHTML = `<div class="ph"><nav class="crumbs" id="crumbs" aria-label="Location"></nav><h2>${p.name}</h2>${note ? `<div class="note">${note}</div>` : ""}</div>`;

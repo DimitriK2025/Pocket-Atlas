@@ -5,7 +5,7 @@ Atlas: choropleth maps from the whole country down to individual census tracts, 
 profile of any place you click.
 
 **Coverage:** all 50 states and the District of Columbia: 3,144 counties, 84,400 census
-tracts, 332 million people. Alaska and Hawaii appear as insets.
+tracts and 33,600 ZIP codes, 332 million people. Alaska and Hawaii appear as insets.
 
 **Statistics:** 99, chosen from the **Data** menu and grouped into 16 topics: Age & Sex ·
 Race & Ethnicity · Ancestry · Language · Place of Birth & citizenship · Marital Status ·
@@ -27,6 +27,9 @@ to load the D3 mapping library and fonts.
   in that statistic's topic for the selected place; click a row to map it.
 - The map opens on the whole country. **States / Counties** switches how it is shaded.
 - Click a state to open it, a county to see its census tracts, and a tract for its profile.
+- **ZIP codes** shows an open state's ZIP Code Tabulation Areas, the Census Bureau's version of
+  ZIP code areas. They cross county and sometimes state lines, so each is shown with the state
+  and county holding most of its land.
   **Tracts** shows every tract in the open state. A state's tracts download the first time
   you open them.
 - The **×** button (or Esc) steps back up one level.
@@ -54,13 +57,16 @@ and takes around 15 minutes.
 
 Data files are compact: each place is stored as arrays in a fixed order (listed in
 `meta.order`), which the page expands when it loads. `docs/data/region.js` (states and
-counties, about 10 MB) loads first; each state's tracts (0.1 to 15 MB) load when opened.
+counties, about 10 MB) loads first; each state's tracts (0.1 to 15 MB) and ZIP codes
+(`docs/data/zip/`, under 4 MB) load when shown.
 
 | Script | What it does |
 |---|---|
 | `scripts/download.sh` | Streams each national ACS table once and splits out the requested states' rows; downloads boundaries |
 | `scripts/process_acs.py` | Computes shares, medians and distributions for every state, county and tract |
 | `scripts/build_geo.sh` | Simplifies one state's tract boundaries into compact TopoJSON |
+| `scripts/download_zcta.sh` | ACS rows for every ZIP Code Tabulation Area, their boundaries, and the ZIP-to-county overlap file |
+| `scripts/build_zcta.sh` | Assigns each ZIP to a state and county, computes its statistics, splits boundaries by state |
 | `scripts/build_region.sh` | State outlines and counties for the whole country |
 | `scripts/bundle.py` | Writes `docs/data/region.js` (states, counties) and `docs/data/<state>.js` (tracts) |
 
