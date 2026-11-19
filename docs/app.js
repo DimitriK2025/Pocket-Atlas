@@ -274,7 +274,7 @@
     const m = METRIC[st.metric], L = eff();
     const where = L === "state" ? null : L === "county" ? `${st.state ? SBY.get(st.state).name : R.name} counties`
       : `${SBY.get(st.state).name} census tracts`;
-    const how = m.type === "cat" ? "" : m.type === "div" ? " · fixed breaks" : where ? ` · 7 equal-count groups of ${where}` : " · states shaded lowest to highest";
+    const how = m.type === "cat" ? "" : m.type === "div" ? " · fixed breaks" : where ? ` · ${where}` : " · states shaded lowest to highest";
     let h = `<div class="ltitle" title="${m.label}: ${m.unit}${how}"><b>${m.label}</b><span>${m.unit}${how}</span></div>`;
     if (L === "tract" && !tractFeats[st.state]) { legendEl.innerHTML = h; return; }
     if (scale.type === "cat") {
