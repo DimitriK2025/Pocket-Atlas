@@ -26,7 +26,7 @@ RAW = ROOT / "data" / "raw"
 OUT = ROOT / "data" / "build"
 
 TABLES = [
-    "b01001", "b01002", "b03002", "b04006", "b05002", "b08013", "b08301", "b08303", "b11001",
+    "b01001", "b01001b", "b01002", "b03002", "b04006", "b05002", "b08013", "b08301", "b08303", "b11001",
     "b11016", "b12001", "b14001", "b15003", "b17001", "b19001", "b19013", "b19083",
     "b21001", "b25002", "b25003", "b25004", "b25010", "b25034",
     "b25035", "b25044", "b25064", "b25070", "b25075", "b25077", "b27010", "c16001", "c17002",
@@ -212,6 +212,12 @@ TOPICS = [
         # B01001 cells: men 20, 21, 22-24, 25-29 = 8-11; women = +24
         M("sex_ratio_2029", "Sex ratio 20-29", "men per 100 women, ages 20-29", "dec1",
           lambda g: P(g.s("b01001", [8, 9, 10, 11]), g.s("b01001", [32, 33, 34, 35])),
+          type="div", thresholds=[85, 93, 98, 102, 107, 115]),
+        # same, minus Black-alone residents (B01001B: men 20-24, 25-29 = 8, 9; women = 23, 24)
+        M("sex_ratio_2029_nb", "Sex ratio 20-29 (excluding Black)",
+          "men per 100 women, ages 20-29, excluding Black residents", "dec1",
+          lambda g: P(g.s("b01001", [8, 9, 10, 11]) - g.s("b01001b", [8, 9]),
+                      g.s("b01001", [32, 33, 34, 35]) - g.s("b01001b", [23, 24])),
           type="div", thresholds=[85, 93, 98, 102, 107, 115]),
     ], charts=[
         C("pyramid", "Age & sex", "pyramid", [b for b, _ in AGE_BINS],
