@@ -209,6 +209,10 @@ TOPICS = [
         M("sex_ratio", "Sex ratio", "men per 100 women", "dec1",
           lambda g: 100 * ratio(g("b01001", 2), g("b01001", 26)) if ratio(g("b01001", 2), g("b01001", 26)) else None,
           type="div", thresholds=[85, 93, 98, 102, 107, 115]),
+        # B01001 cells: men 20, 21, 22-24, 25-29 = 8-11; women = +24
+        M("sex_ratio_2029", "Sex ratio 20-29", "men per 100 women, ages 20-29", "dec1",
+          lambda g: P(g.s("b01001", [8, 9, 10, 11]), g.s("b01001", [32, 33, 34, 35])),
+          type="div", thresholds=[85, 93, 98, 102, 107, 115]),
     ], charts=[
         C("pyramid", "Age & sex", "pyramid", [b for b, _ in AGE_BINS],
           lambda g: [g.s("b01001", n) for _, n in AGE_BINS] + [g.s("b01001", [x + 24 for x in n]) for _, n in AGE_BINS],
