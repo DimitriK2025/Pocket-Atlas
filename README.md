@@ -37,10 +37,14 @@ to load the D3 mapping library and fonts.
 - Hover anything for exact numbers. ± values are 90% margins of error. Counties and tracts
   are compared with their own state.
 
-Map colors use 7 groups with equal numbers of places in each, so every color is used.
+Map colors use 7 shades. Percentages (race, ancestry, education shares, poverty and so on) use
+natural breaks: shade boundaries fall where the data has gaps, so a group concentrated in a few
+neighborhoods still shows its full range. Other measures (income, home values, density, ages)
+use 7 groups with equal numbers of places in each.
 On the national map, counties are grouped across the whole country, so colors mean the same
-thing everywhere. Once you open a state, its counties and tracts are grouped within that state,
-so you can see where things are concentrated inside it.
+thing everywhere. Once you open a state, its counties, ZIP codes and tracts are shaded within that state, and
+inside an open county its tracts are shaded within that county, so you can see where things are
+concentrated wherever you are.
 The sex-ratio map uses fixed breaks centered on 100 instead.
 
 ## Rebuilding the data

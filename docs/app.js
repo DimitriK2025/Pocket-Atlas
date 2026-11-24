@@ -225,7 +225,9 @@
     // inside a state, its counties are colored against each other so differences within it show
     if (L === "county") return st.state ? countiesOf(st.state) : countyFeats;
     if (L === "zip") return zipFeats[st.state] || [];
-    return tractFeats[st.state] || [];
+    // tracts: compared within the open county if there is one, otherwise within the state
+    const t = tractFeats[st.state] || [];
+    return st.focus ? t.filter((f) => f.properties.GEOID.startsWith(st.focus)) : t;
   }
   function visibleUnits() {
     const L = eff();
@@ -234,6 +236,33 @@
     if (L === "zip") return zipFeats[st.state] || [];
     const t = tractFeats[st.state] || [];
     return st.focus ? t.filter((f) => f.properties.GEOID.startsWith(st.focus)) : t;
+  }
+  // Natural breaks (Jenks / Fisher optimal classification): class boundaries that minimise the
+  // spread within each class, so they fall where the data has gaps. Values are first binned
+  // (at most ~400 bins) so this stays fast even for states with thousands of tracts.
+  function naturalBreaks(vals, k) {
+    const lo = d3.min(vals), hi = d3.max(vals);
+    if (hi === lo) return [];
+    const nb = 400, w = (hi - lo) / nb, bins = new Map();
+    vals.forEach((v) => { const b = Math.min(nb - 1, Math.floor((v - lo) / w)); bins.set(b, (bins.get(b) || 0) + 1); });
+    const pts = [...bins.entries()].sort((a, b) => a[0] - b[0]).map(([b, c]) => [lo + (b + 0.5) * w, c]);
+    const n = pts.length; k = Math.min(k, n);
+    if (k < 2) return [];
+    const W = [0], S = [0], Q = [0];
+    pts.forEach(([x, c], i) => { W.push(W[i] + c); S.push(S[i] + c * x); Q.push(Q[i] + c * x * x); });
+    const cost = (i, j) => { const ww = W[j + 1] - W[i], ss = S[j + 1] - S[i]; return Q[j + 1] - Q[i] - (ss * ss) / ww; };
+    const D = [Array.from({ length: n }, (_, j) => cost(0, j))], B = [new Array(n).fill(0)];
+    for (let m = 1; m < k; m++) {
+      const row = new Array(n).fill(Infinity), br = new Array(n).fill(0);
+      for (let j = m; j < n; j++) for (let i = m; i <= j; i++) {
+        const c = D[m - 1][i - 1] + cost(i, j);
+        if (c < row[j]) { row[j] = c; br[j] = i; }
+      }
+      D.push(row); B.push(br);
+    }
+    const starts = [];
+    for (let m = k - 1, j = n - 1; m > 0; m--) { const i = B[m][j]; starts.unshift(i); j = i - 1; }
+    return starts.map((i) => (pts[i - 1][0] + pts[i][0]) / 2);
   }
   let scale = null;
   function buildScale() {
@@ -247,8 +276,11 @@
     if (m.type === "div") th = m.thresholds;
     else {
       const vals = refUnits().map((f) => val(f.properties.GEOID)).filter(has);
-      th = vals.length ? d3.scaleQuantile().domain(vals).range(d3.range(7)).quantiles().map((v) => niceRound(v, m.fmt)) : [];
-      th = th.filter((v, i) => i === 0 || v > th[i - 1]);
+      // Percentages are often concentrated in a few places (e.g. most tracts 1% Black, some 90%),
+      // so they use natural breaks; evenly spread measures (income, values, density) use equal counts.
+      th = !vals.length ? [] : m.fmt === "pct" ? naturalBreaks(vals, 7)
+        : d3.scaleQuantile().domain(vals).range(d3.range(7)).quantiles();
+      th = th.map((v) => niceRound(v, m.fmt)).filter((v, i, a) => i === 0 || v > a[i - 1]);
     }
     const colors = m.type === "div" ? DIV : SEQ;
     const used = colors.length === th.length + 1 ? colors : d3.quantize(d3.interpolateRgbBasis(colors), Math.max(2, th.length + 1));
@@ -297,7 +329,7 @@
   function drawLegend() {
     const m = METRIC[st.metric], L = eff();
     const where = L === "state" ? null : L === "county" ? `${st.state ? SBY.get(st.state).name : R.name} counties`
-      : L === "zip" ? `${SBY.get(st.state).name} ZIP codes` : `${SBY.get(st.state).name} census tracts`;
+      : L === "zip" ? `${SBY.get(st.state).name} ZIP codes` : `${st.focus ? placeName(st.focus) : SBY.get(st.state).name} census tracts`;
     const how = m.type === "cat" ? "" : m.type === "div" ? " · fixed breaks" : where ? ` · ${where}` : " · states shaded lowest to highest";
     let h = `<div class="ltitle" title="${m.label}: ${m.unit}${how}"><b>${m.label}</b><span>${m.unit}${how}</span></div>`;
     if ((L === "tract" && !tractFeats[st.state]) || (L === "zip" && !zipFeats[st.state])) { legendEl.innerHTML = h; return; }
